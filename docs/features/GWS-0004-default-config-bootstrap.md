@@ -2,8 +2,10 @@
 
 ## Description
 
-On startup, if `~/.config/waybar/config.yaml` does not exist, the sidecar
-writes out a built-in default config so it has something to render.
+On startup, if `configPath` (default
+`~/.config/waybar/go-waybar-sidecar/config.yaml`, see GWS-0014) does not
+exist, the sidecar writes out a built-in default config so it has something
+to render.
 
 ## Implementation
 
@@ -19,8 +21,9 @@ writes out a built-in default config so it has something to render.
 
 ## Configuration
 
-- `configPath` = `~/.config/waybar/config.yaml` (via `waybarDir`, which is
-  `~/.config/waybar` resolved through symlinks by `resolvedPath()`).
+- `configPath` = `~/.config/waybar/go-waybar-sidecar/config.yaml` by default
+  (via `waybarDir`, which is `~/.config/waybar` resolved through symlinks by
+  `resolvedPath()`), or the path given via `--config` (see GWS-0014).
 - The default content is the repo's `config.yaml`: a `waybar` section with
   `custom/Start`, `clock`, and `wlr/taskbar` modules, plus a default
   `menu_definition` (Apps → Terminal/Browser, Power → Shutdown/Reboot).

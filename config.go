@@ -18,8 +18,8 @@ type MenuItem struct {
 }
 
 type Config struct {
-	Waybar    map[string]any
-	StartMenu []MenuItem
+	Waybar map[string]any
+	Menus  map[string][]MenuItem
 }
 
 type rawConfig struct {
@@ -28,9 +28,9 @@ type rawConfig struct {
 
 var (
 	waybarDir  = resolvedPath(filepath.Join(os.Getenv("HOME"), ".config/waybar"))
-	configPath = filepath.Join(waybarDir, "config.yaml")
+	configPath = filepath.Join(waybarDir, "go-waybar-sidecar", "config.yaml")
 
-	outXML  = filepath.Join(waybarDir, "start.xml")
+	menuDir = filepath.Join(waybarDir, "gtk3-menus")
 	outJSON = filepath.Join(waybarDir, "config.jsonc")
 )
 
@@ -45,6 +45,16 @@ func resolvedPath(p string) string {
 }
 
 func ensureConfig() {
+	if err := os.MkdirAll(waybarDir, 0o755); err != nil {
+		logger.Error("failed to create waybar dir", "path", waybarDir, "err", err)
+		os.Exit(1)
+	}
+
+	if err := os.MkdirAll(menuDir, 0o755); err != nil {
+		logger.Error("failed to create menu output dir", "path", menuDir, "err", err)
+		os.Exit(1)
+	}
+
 	if _, err := os.Stat(configPath); err == nil {
 		logger.Debug("config already exists", "path", configPath)
 		return
@@ -78,26 +88,38 @@ func loadConfig() Config {
 		os.Exit(1)
 	}
 
-	var menuRaw struct {
-		Waybar struct {
-			Start struct {
-				MenuDefinition []MenuItem `yaml:"menu_definition"`
-			} `yaml:"custom/Start"`
-		} `yaml:"waybar"`
-	}
-	if err := yaml.Unmarshal(b, &menuRaw); err != nil {
-		logger.Error("failed to parse config", "path", configPath, "err", err)
-		os.Exit(1)
+	menus := map[string][]MenuItem{}
+	for name, modVal := range raw.Waybar {
+		mod, ok := modVal.(map[string]any)
+		if !ok {
+			continue
+		}
+		md, ok := mod["menu_definition"]
+		if !ok {
+			continue
+		}
+
+		mb, err := yaml.Marshal(md)
+		if err != nil {
+			logger.Error("failed to parse menu_definition", "module", name, "err", err)
+			os.Exit(1)
+		}
+		var items []MenuItem
+		if err := yaml.Unmarshal(mb, &items); err != nil {
+			logger.Error("failed to parse menu_definition", "module", name, "err", err)
+			os.Exit(1)
+		}
+		menus[name] = items
 	}
 
 	cfg := Config{
-		Waybar:    raw.Waybar,
-		StartMenu: menuRaw.Waybar.Start.MenuDefinition,
+		Waybar: raw.Waybar,
+		Menus:  menus,
 	}
 
 	logger.Debug("config loaded",
 		"waybar_keys", len(cfg.Waybar),
-		"menu_items", len(cfg.StartMenu),
+		"menus", len(cfg.Menus),
 	)
 	return cfg
 }

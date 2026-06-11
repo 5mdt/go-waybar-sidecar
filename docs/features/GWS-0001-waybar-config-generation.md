@@ -9,16 +9,17 @@ that Waybar consumes.
 ## Implementation
 
 `generator.go`:
-- `generate()` calls `buildXML()` first (see GWS-0002) to obtain the
-  `menuActions` map, then `writeJSON(cfg.Waybar, menuActions)`.
+- `generate()` calls `buildXML()` first (see GWS-0002/GWS-0015) to obtain a
+  `map[string]menuResult` (one entry per menu-bearing module), then
+  `writeJSON(cfg.Waybar, menus)`.
 - `sanitize()` recursively converts YAML-decoded `map[interface{}]interface{}`
   values into `map[string]any` so the tree can be marshaled by
   `encoding/json`.
 - `writeJSON()`:
   - Sanitizes `cfg.Waybar`.
-  - If a `custom/Start` key exists, removes its `menu_definition` field and
-    sets `menu: "on-click"`, `menu-file: <outXML>`, and
-    `menu-actions: <menuActions>`.
+  - For each module name present in `menus` (see GWS-0015), removes its
+    `menu_definition` field and sets `menu: "on-click"`, `menu-file:
+    <path>`, and `menu-actions: <map>`.
   - Encodes the result as indented JSON to `outJSON`.
 
 ## Configuration
@@ -40,11 +41,12 @@ that Waybar consumes.
 
 - `sanitize()` with nested `map[interface{}]interface{}` and `[]any` values:
   assert the result is composed entirely of `map[string]any`.
-- `writeJSON()` with a `Waybar` map containing `custom/Start.menu_definition`:
+- `writeJSON()` with a `menus` map containing an entry for `custom/Start`:
   assert the written JSON has `menu_definition` removed and
-  `menu`/`menu-file`/`menu-actions` set.
-- `writeJSON()` with a `Waybar` map that has no `custom/Start` key: assert it
-  is written unchanged (aside from sanitization).
+  `menu`/`menu-file`/`menu-actions` set for that module.
+- `writeJSON()` with a `menus` map that has no entry for a given module:
+  assert that module is written unchanged (aside from sanitization). See
+  GWS-0015 for the multi-module case.
 
 ### Integration Testing
 

@@ -33,7 +33,7 @@ func watch(cfg *Config) {
 			if !isRelevantOp(e.Op) {
 				continue
 			}
-			if e.Name == outXML || e.Name == outJSON {
+			if e.Name == outJSON || strings.HasPrefix(e.Name, menuDir+string(filepath.Separator)) {
 				continue
 			}
 			if isIgnoredFile(e.Name) {
@@ -47,7 +47,9 @@ func watch(cfg *Config) {
 				timer.Stop()
 			}
 			timer = time.AfterFunc(200*time.Millisecond, func() {
-				*cfg = loadConfig()
+				if !noGenerate {
+					*cfg = loadConfig()
+				}
 				generate(*cfg)
 			})
 			timerMu.Unlock()

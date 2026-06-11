@@ -2,7 +2,8 @@
 
 ## Description
 
-After regenerating `config.jsonc`/`start.xml`, the sidecar asks a running
+After regenerating `config.jsonc` and the per-menu XML files (GWS-0015), the
+sidecar asks a running
 Waybar instance to reload its configuration in place by sending `SIGUSR2`,
 avoiding a full restart when possible.
 

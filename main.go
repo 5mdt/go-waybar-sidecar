@@ -17,7 +17,9 @@ func main() {
 	levelFlag := flag.String("log-level", "info", "log level: debug, info, warn, error")
 	outputFlag := flag.String("log-output", "stdout", "log destination: stdout, stderr, or a file path")
 	notifyLevelFlag := flag.String("notify-level", "error", "notification threshold: off, debug, info, warn, error")
+	configFlag := flag.String("config", "", "path to config.yaml (default: "+configPath+")")
 	daemonFlag := flag.Bool("daemon", false, "fork to background")
+	noGenerateFlag := flag.Bool("no-generate", false, "watch and reload waybar without generating config.jsonc/menus from config.yaml")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stdout, `waybar-sidecar — generates waybar config from %s and keeps waybar running.
@@ -30,17 +32,25 @@ Flags:
   --log-level <level>   log verbosity: debug, info, warn, error  (default: info)
   --log-output <dest>   log destination: stdout, stderr, or a file path  (default: stdout)
   --notify-level <lvl>  notification threshold: off, debug, info, warn, error  (default: error)
+  --config <path>       path to config.yaml  (default: %s)
+  --no-generate         watch and reload waybar without generating config.jsonc/menus from config.yaml
   --help                show this help
 
 Config:
-  Source:  %s
-  XML out: %s
+  Source:   %s
+  Menu dir: %s
   JSON out: %s
-  PID dir: %s
-`, configPath, configPath, outXML, outJSON, pidDir)
+  PID dir:  %s
+`, configPath, configPath, configPath, menuDir, outJSON, pidDir)
 	}
 
 	flag.Parse()
+
+	if *configFlag != "" {
+		configPath = resolvedPath(*configFlag)
+	}
+
+	noGenerate = *noGenerateFlag
 
 	level, err := parseLogLevel(*levelFlag)
 	if err != nil {
@@ -87,14 +97,18 @@ func run() {
 
 	logger.Info("starting waybar sidecar",
 		"config", configPath,
-		"out_xml", outXML,
+		"menu_dir", menuDir,
 		"out_json", outJSON,
 	)
 
 	ensureSingleInstance()
 	savePID("waybar-sidecar", os.Getpid())
-	ensureConfig()
-	cfg := loadConfig()
+
+	var cfg Config
+	if !noGenerate {
+		ensureConfig()
+		cfg = loadConfig()
+	}
 	generate(cfg)
 	go watch(&cfg)
 

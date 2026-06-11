@@ -1,40 +1,45 @@
-# GWS-0002. Start menu XML generation (start.xml)
+# GWS-0002. Menu XML generation (GtkMenu documents)
 
 ## Description
 
-The sidecar renders `~/.config/waybar/start.xml`, a GTK `GtkMenu` definition
-used by Waybar's `custom/Start` module, from the `menu_definition` list under
-`waybar.custom/Start` in `config.yaml`.
+The sidecar renders one GTK `GtkMenu` XML document per menu-bearing module
+(see GWS-0015), e.g. `~/.config/waybar/gtk3-menus/custom-start.xml` for
+`waybar.custom/Start`, from that module's `menu_definition` list in
+`config.yaml`.
 
 ## Implementation
 
 `generator.go`:
-- `buildXML(cfg)`:
+- `buildXML(cfg)`, for each entry in `cfg.Menus`:
   - Creates an `etree` document with an `<interface>` root containing a
     `GtkMenu` object with `id="menu"`.
-  - For each top-level entry in `cfg.StartMenu`, calls `addNode()` to append a
-    `GtkMenuItem` child.
-  - Indents the document (2 spaces) and writes it to `outXML`.
-  - Returns the `menuActions` map built by `addNode()` (item name → action),
-    consumed by `writeJSON()` (GWS-0001) for the `menu-actions` field.
-- `cfg.StartMenu` is parsed in `config.go` `loadConfig()` from
+  - For each top-level entry in the menu's items, calls `addNode()` to
+    append a `GtkMenuItem` child.
+  - Indents the document (2 spaces) and writes it to
+    `gtk3-menus/<menuFileName(module)>.xml`.
+  - Returns a `menuResult{path, actions}` per module, where `actions` is the
+    `menuActions` map built by `addNode()` (item name → action), consumed by
+    `writeJSON()` (GWS-0001) for the `menu-actions` field.
+- `cfg.Menus["custom/Start"]` is parsed in `config.go` `loadConfig()` from
   `waybar.custom/Start.menu_definition` into `[]MenuItem{Name, Action,
-  Children}`.
+  Children}` (see GWS-0015 for how modules are discovered generically).
 
 ## Configuration
 
-- Source: `waybar.custom/Start.menu_definition` in
+- Source: `waybar.<module>.menu_definition` in
   `~/.config/waybar/config.yaml`. Each item has `name`, and either `action`
   (leaf) or `children` (submenu, see GWS-0003).
-- Output: `~/.config/waybar/start.xml`.
+- Output: `~/.config/waybar/gtk3-menus/<menuFileName(module)>.xml`, e.g.
+  `custom-start.xml` for `custom/Start`. The `gtk3-menus` directory is
+  created automatically if missing.
 
 ## Testing
 
 ### Human Testing
 
 - Edit `menu_definition` in `config.yaml` to add/remove a top-level item,
-  trigger a regeneration, and confirm `start.xml` contains a matching
-  `GtkMenuItem`.
+  trigger a regeneration, and confirm the corresponding XML file contains a
+  matching `GtkMenuItem`.
 - Click the Start module in Waybar and confirm the new item appears in the
   popup menu.
 
@@ -49,8 +54,8 @@ used by Waybar's `custom/Start` module, from the `menu_definition` list under
 ### Integration Testing
 
 - Run `generate()` against a temp config with a representative
-  `menu_definition` and assert `outXML` is well-formed XML parseable back into
-  the expected item/label structure.
+  `menu_definition` and assert the resulting XML file is well-formed and
+  parseable back into the expected item/label structure.
 
 ## Status
 

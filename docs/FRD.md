@@ -15,3 +15,6 @@
 - GWS-0011. Configurable logging
 - GWS-0012. Graceful shutdown on signals
 - GWS-0013. Desktop notifications via notify-send
+- GWS-0014. Configurable config path
+- GWS-0015. Multiple menu support across waybar modules
+- GWS-0016. Watch-only mode (--no-generate)

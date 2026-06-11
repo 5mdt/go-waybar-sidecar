@@ -1,0 +1,54 @@
+# GWS-0004. Default config bootstrap
+
+## Description
+
+On startup, if `~/.config/waybar/config.yaml` does not exist, the sidecar
+writes out a built-in default config so it has something to render.
+
+## Implementation
+
+`config.go`:
+- `defaultConfig` is the contents of `config.yaml` (in the repo root),
+  embedded into the binary at build time via `//go:embed config.yaml`.
+- `ensureConfig()`, called from `run()` before `loadConfig()`:
+  - If `configPath` exists, logs at debug and returns.
+  - Otherwise logs at info, creates `filepath.Dir(configPath)` (`0o755`), and
+    writes `defaultConfig` to `configPath` (`0o644`).
+  - Any error creating the directory or writing the file logs at error and
+    exits the process (`os.Exit(1)`).
+
+## Configuration
+
+- `configPath` = `~/.config/waybar/config.yaml` (via `waybarDir`, which is
+  `~/.config/waybar` resolved through symlinks by `resolvedPath()`).
+- The default content is the repo's `config.yaml`: a `waybar` section with
+  `custom/Start`, `clock`, and `wlr/taskbar` modules, plus a default
+  `menu_definition` (Apps → Terminal/Browser, Power → Shutdown/Reboot).
+
+## Testing
+
+### Human Testing
+
+- Remove `~/.config/waybar/config.yaml` (back it up first), start the
+  sidecar, and confirm the file is recreated with the default content and an
+  info log "config not found, writing default" is emitted.
+- Start the sidecar again with the file present and confirm it logs "config
+  already exists" at debug and does not overwrite the file.
+
+### Unit Testing
+
+- `ensureConfig()` with `configPath` pointing at a non-existent file in a
+  temp dir: assert the file is created and its contents equal `config.yaml`'s
+  embedded bytes.
+- `ensureConfig()` with `configPath` pointing at an existing file: assert the
+  file's contents are unchanged after the call.
+
+### Integration Testing
+
+- Launch the binary with `HOME` pointed at an empty temp directory: assert
+  `~/.config/waybar/config.yaml` is created and `generate()` subsequently
+  succeeds using the default config.
+
+## Status
+
+Implemented.

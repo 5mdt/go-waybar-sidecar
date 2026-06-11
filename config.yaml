@@ -1,0 +1,28 @@
+waybar:
+  layer: top
+  position: top
+  modules-left: [custom/Start]
+  modules-right: [clock]
+  modules-center: [wlr/taskbar]
+
+  custom/Start:
+    format: "󰨡 Start"
+    menu: on-click
+    menu_definition:
+      - name: Apps
+        children:
+          - name: Terminal
+            action: "foot"
+          - name: Browser
+            action: "firefox"
+      - name: Power
+        children:
+          - name: Shutdown
+            action: "systemctl poweroff"
+          - name: Reboot
+            action: "systemctl reboot"
+
+  clock:
+    format: "{:%H:%M}"
+  wlr/taskbar:
+    format: "{icon}"

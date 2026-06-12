@@ -1,5 +1,7 @@
 # GWS-0001. Waybar config generation (config.jsonc)
 
+**Tags:** #config-generation
+
 ## Description
 
 The sidecar renders `~/.config/waybar/config.jsonc` from the `waybar` section

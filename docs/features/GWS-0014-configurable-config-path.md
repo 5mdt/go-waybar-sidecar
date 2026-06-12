@@ -1,5 +1,7 @@
 # GWS-0014. Configurable config path
 
+**Tags:** #config #cli
+
 ## Description
 
 The sidecar's source `config.yaml` lives in its own subdirectory,
@@ -13,14 +15,14 @@ missing.
 `config.go`:
 - `configPath` defaults to `filepath.Join(waybarDir, "go-waybar-sidecar",
   "config.yaml")`, i.e. `~/.config/waybar/go-waybar-sidecar/config.yaml`.
-- `waybarDir` and `outJSON` (`config.jsonc`) are unchanged — they remain
+- `waybarDir` and `outJSON` (`config.jsonc`) are unchanged - they remain
   directly under `~/.config/waybar`, where waybar itself expects
   `config.jsonc`. `menuDir` (`~/.config/waybar/gtk3-menus`) holds one XML
   file per menu-bearing module (GWS-0015).
 - `ensureConfig()` creates `waybarDir`, `menuDir`, and
   `filepath.Dir(configPath)` (`0o755` each) before writing the default
-  config, so all required directories — including any custom `--config`
-  directory — are created automatically on first run.
+  config, so all required directories - including any custom `--config`
+  directory - are created automatically on first run.
 
 `main.go`:
 - New flag `--config <path>` (default: empty). After `flag.Parse()`, if set,

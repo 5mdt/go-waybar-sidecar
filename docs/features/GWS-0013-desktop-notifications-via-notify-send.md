@@ -1,11 +1,13 @@
 # GWS-0013. Desktop notifications via notify-send
 
+**Tags:** #logging
+
 ## Description
 
 The sidecar can mirror its log output to desktop notifications via
 `notify-send`, so problems are visible even when running in `--daemon` mode
 (where stdio is closed and file logs aren't watched). Notifications are driven
-by the same log records as `log/slog` — a configurable level threshold decides
+by the same log records as `log/slog` - a configurable level threshold decides
 which records are also sent to the user's notification daemon (mako, swaync,
 etc.). The feature is best-effort: if `notify-send` is unavailable, text
 logging is unaffected and a single info line reports that notifications are

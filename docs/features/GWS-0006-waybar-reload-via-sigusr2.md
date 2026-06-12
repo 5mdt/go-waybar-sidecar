@@ -1,5 +1,7 @@
 # GWS-0006. Waybar reload via SIGUSR2
 
+**Tags:** #reload #process-lifecycle
+
 ## Description
 
 After regenerating `config.jsonc` and the per-menu XML files (GWS-0015), the
@@ -17,7 +19,7 @@ avoiding a full restart when possible.
   - Logs "waybar reloaded via USR2" and saves the PID via `savePID("waybar",
     pid)` (GWS-0009).
   - Waits 500ms, then re-checks `waybarPID()`. If Waybar is still running,
-    returns — reload succeeded.
+    returns - reload succeeded.
   - If Waybar is no longer running, logs a warning and falls through to cold
     start (GWS-0007).
 - If no valid PID is found, or `SIGUSR2` fails, falls through to cold start.

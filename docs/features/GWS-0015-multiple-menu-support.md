@@ -1,10 +1,12 @@
 # GWS-0015. Multiple menu support across waybar modules
 
+**Tags:** #config-generation #menu
+
 ## Description
 
 Any module under `waybar:` in `config.yaml` that has a `menu_definition`
 field gets its own GTK `GtkMenu` XML file, `menu: "on-click"`, `menu-file`,
-and `menu-actions` wired up automatically — not just `custom/Start`. This
+and `menu-actions` wired up automatically - not just `custom/Start`. This
 lets users define independent popup menus for multiple modules (e.g.
 `custom/Start` and `custom/Power`) in the same config.
 
@@ -15,7 +17,7 @@ lets users define independent popup menus for multiple modules (e.g.
   iterates every top-level key in `raw.Waybar`. For each value that is a
   `map[string]any` and contains a `menu_definition` key, the value is
   re-marshaled to YAML and unmarshaled into `[]MenuItem` (round-trip via
-  `yaml.Marshal`/`yaml.Unmarshal`, reusing the existing tagged struct —
+  `yaml.Marshal`/`yaml.Unmarshal`, reusing the existing tagged struct -
   no second typed pass needed).
 - Result is `Config.Menus map[string][]MenuItem`, keyed by module name
   (e.g. `"custom/Start"`, `"custom/Power"`). Modules without

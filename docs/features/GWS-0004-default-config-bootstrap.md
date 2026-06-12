@@ -1,5 +1,7 @@
 # GWS-0004. Default config bootstrap
 
+**Tags:** #config #config-generation
+
 ## Description
 
 On startup, if `configPath` (default

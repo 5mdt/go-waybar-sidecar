@@ -2,19 +2,29 @@
 
 ## Available Features
 
-- GWS-0001. Waybar config generation (config.jsonc)
-- GWS-0002. Start menu XML generation (start.xml)
-- GWS-0003. Nested submenu support
-- GWS-0004. Default config bootstrap
-- GWS-0005. Live config reload on file changes
-- GWS-0006. Waybar reload via SIGUSR2
-- GWS-0007. Waybar cold start fallback
-- GWS-0008. Single-instance enforcement with takeover
-- GWS-0009. PID file tracking
-- GWS-0010. Daemon mode
-- GWS-0011. Configurable logging
-- GWS-0012. Graceful shutdown on signals
-- GWS-0013. Desktop notifications via notify-send
-- GWS-0014. Configurable config path
-- GWS-0015. Multiple menu support across waybar modules
-- GWS-0016. Watch-only mode (--no-generate)
+- [GWS-0001. Waybar config generation (config.jsonc)](features/GWS-0001-waybar-config-generation.md) - `#config-generation`
+- [GWS-0002. Start menu XML generation (start.xml)](features/GWS-0002-start-menu-xml-generation.md) - `#config-generation` `#menu`
+- [GWS-0003. Nested submenu support](features/GWS-0003-nested-submenu-support.md) - `#menu`
+- [GWS-0004. Default config bootstrap](features/GWS-0004-default-config-bootstrap.md) - `#config` `#config-generation`
+- [GWS-0005. Live config reload on file changes](features/GWS-0005-live-config-reload-on-file-changes.md) - `#config` `#reload`
+- [GWS-0006. Waybar reload via SIGUSR2](features/GWS-0006-waybar-reload-via-sigusr2.md) - `#reload` `#process-lifecycle`
+- [GWS-0007. Waybar cold start fallback](features/GWS-0007-waybar-cold-start-fallback.md) - `#reload` `#process-lifecycle`
+- [GWS-0008. Single-instance enforcement with takeover](features/GWS-0008-single-instance-enforcement-with-takeover.md) - `#process-lifecycle`
+- [GWS-0009. PID file tracking](features/GWS-0009-pid-file-tracking.md) - `#process-lifecycle`
+- [GWS-0010. Daemon mode](features/GWS-0010-daemon-mode.md) - `#process-lifecycle` `#cli`
+- [GWS-0011. Configurable logging](features/GWS-0011-configurable-logging.md) - `#logging` `#cli`
+- [GWS-0012. Graceful shutdown on signals](features/GWS-0012-graceful-shutdown-on-signals.md) - `#process-lifecycle`
+- [GWS-0013. Desktop notifications via notify-send](features/GWS-0013-desktop-notifications-via-notify-send.md) - `#logging`
+- [GWS-0014. Configurable config path](features/GWS-0014-configurable-config-path.md) - `#config` `#cli`
+- [GWS-0015. Multiple menu support across waybar modules](features/GWS-0015-multiple-menu-support.md) - `#config-generation` `#menu`
+- [GWS-0016. Watch-only mode (--no-generate)](features/GWS-0016-watch-only-no-generate-mode.md) - `#config-generation` `#reload` `#cli`
+
+## Tags
+
+- `#config`: GWS-0004, GWS-0005, GWS-0014
+- `#config-generation`: GWS-0001, GWS-0002, GWS-0004, GWS-0015, GWS-0016
+- `#menu`: GWS-0002, GWS-0003, GWS-0015
+- `#reload`: GWS-0005, GWS-0006, GWS-0007, GWS-0016
+- `#process-lifecycle`: GWS-0006, GWS-0007, GWS-0008, GWS-0009, GWS-0010, GWS-0012
+- `#logging`: GWS-0011, GWS-0013
+- `#cli`: GWS-0010, GWS-0011, GWS-0014, GWS-0016

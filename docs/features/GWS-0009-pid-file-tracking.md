@@ -1,5 +1,7 @@
 # GWS-0009. PID file tracking
 
+**Tags:** #process-lifecycle
+
 ## Description
 
 The sidecar records the PIDs of itself and the Waybar process it manages in a
@@ -15,9 +17,9 @@ GWS-0008's takeover logic has a PID to check.
   the directory or write the file.
 
 Called with two names:
-- `"waybar-sidecar"` — written once at startup in `run()` with the sidecar's
+- `"waybar-sidecar"` - written once at startup in `run()` with the sidecar's
   own `os.Getpid()`.
-- `"waybar"` — written by `reloadWaybar()` (`waybar.go`) whenever a Waybar
+- `"waybar"` - written by `reloadWaybar()` (`waybar.go`) whenever a Waybar
   PID is confirmed, whether via SIGUSR2 reload (GWS-0006) or cold start
   (GWS-0007).
 

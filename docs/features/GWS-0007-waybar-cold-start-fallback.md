@@ -1,5 +1,7 @@
 # GWS-0007. Waybar cold start fallback
 
+**Tags:** #reload #process-lifecycle
+
 ## Description
 
 If Waybar is not running, or it dies after a `SIGUSR2` reload (GWS-0006), the

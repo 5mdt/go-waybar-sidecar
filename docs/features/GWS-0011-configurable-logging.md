@@ -1,5 +1,7 @@
 # GWS-0011. Configurable logging
 
+**Tags:** #logging #cli
+
 ## Description
 
 Logging verbosity and destination are configurable via flags, using
@@ -9,7 +11,7 @@ structured text logs (`log/slog`).
 
 `main.go`:
 - `--log-level <level>` (default `"info"`): parsed by `parseLogLevel()`,
-  which delegates to `slog.Level.UnmarshalText` — accepts `debug`, `info`,
+  which delegates to `slog.Level.UnmarshalText` - accepts `debug`, `info`,
   `warn`, `error` (case-insensitive). An invalid value logs an error and
   exits (`os.Exit(1)`) before any output destination is configured.
 - `--log-output <dest>` (default `"stdout"`): parsed by `buildLogger(level,

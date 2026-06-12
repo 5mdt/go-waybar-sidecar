@@ -1,5 +1,7 @@
 # GWS-0016. Watch-only mode (--no-generate)
 
+**Tags:** #config-generation #reload #cli
+
 ## Description
 
 Some users hand-maintain their own `~/.config/waybar/config.jsonc` (and any
@@ -17,7 +19,7 @@ The `--no-generate` flag opts out of the yaml-to-output generation step
   reload behavior.
 - `generate(cfg Config)` is split:
   - When `noGenerate` is `true`, it logs that generation was skipped and calls
-    `doReload()` directly — no XML/JSON is written.
+    `doReload()` directly - no XML/JSON is written.
   - Otherwise it calls the extracted `writeOutputs(cfg)` (the previous
     `buildXML`/`writeJSON`/log body) and then `doReload()`.
 
@@ -27,7 +29,7 @@ The `--no-generate` flag opts out of the yaml-to-output generation step
 - After `flag.Parse()`, `noGenerate = *noGenerateFlag`.
 - `flag.Usage` documents the flag.
 - `run()`: when `noGenerate` is set, skips `ensureConfig()` and `loadConfig()`
-  entirely (an empty `Config{}` is passed to `generate`/`watch` instead) — a
+  entirely (an empty `Config{}` is passed to `generate`/`watch` instead) - a
   missing or invalid `config.yaml` is irrelevant in this mode.
 
 `watcher.go`:

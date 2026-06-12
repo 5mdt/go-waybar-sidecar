@@ -1,5 +1,7 @@
 # GWS-0002. Menu XML generation (GtkMenu documents)
 
+**Tags:** #config-generation #menu
+
 ## Description
 
 The sidecar renders one GTK `GtkMenu` XML document per menu-bearing module

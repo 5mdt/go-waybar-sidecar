@@ -1,5 +1,7 @@
 # GWS-0003. Nested submenu support
 
+**Tags:** #menu
+
 ## Description
 
 Items in `menu_definition` may contain `children`, which are rendered as a
@@ -17,7 +19,7 @@ nested `GtkMenu` submenu instead of a clickable action.
   - A `<child type="submenu">` containing a new `GtkMenu` object is created.
   - `addNode()` is called recursively for each entry in `item.Children`,
     appending into the new submenu. Submenu items are not added to
-    `actions` — only leaves contribute actions.
+    `actions` - only leaves contribute actions.
 - Recursion has no depth limit; nesting depth is whatever `menu_definition`
   declares.
 

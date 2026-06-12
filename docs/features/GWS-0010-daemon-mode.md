@@ -1,5 +1,7 @@
 # GWS-0010. Daemon mode
 
+**Tags:** #process-lifecycle #cli
+
 ## Description
 
 The `--daemon` flag re-launches the sidecar in the background, detached from

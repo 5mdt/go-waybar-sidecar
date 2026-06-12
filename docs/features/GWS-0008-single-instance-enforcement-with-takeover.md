@@ -1,5 +1,7 @@
 # GWS-0008. Single-instance enforcement with takeover
 
+**Tags:** #process-lifecycle
+
 ## Description
 
 On startup, the sidecar checks for an already-running instance via its pidfile.
@@ -8,7 +10,7 @@ exiting itself.
 
 ## Implementation
 
-`pid.go` — `ensureSingleInstance()`:
+`pid.go` - `ensureSingleInstance()`:
 - Reads `~/.local/state/waybar/waybar-sidecar.pid`.
 - Verifies the PID belongs to a running `go-waybar-sidecar` process via
   `/proc/<pid>/exe`.

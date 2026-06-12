@@ -1,5 +1,7 @@
 # GWS-0005. Live config reload on file changes
 
+**Tags:** #config #reload
+
 ## Description
 
 The sidecar watches the config file and the Waybar config directory for

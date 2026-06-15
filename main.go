@@ -13,16 +13,32 @@ import (
 
 var logger *slog.Logger
 
-func main() {
-	levelFlag := flag.String("log-level", "info", "log level: debug, info, warn, error")
-	outputFlag := flag.String("log-output", "stdout", "log destination: stdout, stderr, or a file path")
-	notifyLevelFlag := flag.String("notify-level", "error", "notification threshold: off, debug, info, warn, error")
-	configFlag := flag.String("config", "", "path to config.yaml (default: "+configPath+")")
-	daemonFlag := flag.Bool("daemon", false, "fork to background")
-	noGenerateFlag := flag.Bool("no-generate", false, "watch and reload waybar without generating config.jsonc/menus from config.yaml")
+type cliFlags struct {
+	logLevel    string
+	logOutput   string
+	notifyLevel string
+	config      string
+	daemon      bool
+	noGenerate  bool
+}
 
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stdout, `waybar-sidecar — generates waybar config from %s and keeps waybar running.
+func parseFlags() cliFlags {
+	var f cliFlags
+	flag.StringVar(&f.logLevel, "log-level", "info", "log level: debug, info, warn, error")
+	flag.StringVar(&f.logOutput, "log-output", "stdout", "log destination: stdout, stderr, or a file path")
+	flag.StringVar(&f.notifyLevel, "notify-level", "error", "notification threshold: off, debug, info, warn, error")
+	flag.StringVar(&f.config, "config", "", "path to config.yaml (default: "+configPath+")")
+	flag.BoolVar(&f.daemon, "daemon", false, "fork to background")
+	flag.BoolVar(&f.noGenerate, "no-generate", false, "watch and reload waybar without generating config.jsonc/menus from config.yaml")
+
+	flag.Usage = printUsage
+
+	flag.Parse()
+	return f
+}
+
+func printUsage() {
+	fmt.Fprintf(os.Stdout, `waybar-sidecar — generates waybar config from %s and keeps waybar running.
 
 Usage:
   waybar-sidecar [flags]
@@ -42,38 +58,39 @@ Config:
   JSON out: %s
   PID dir:  %s
 `, configPath, configPath, configPath, menuDir, outJSON, pidDir)
+}
+
+func main() {
+	flags := parseFlags()
+
+	if flags.config != "" {
+		configPath = resolvedPath(flags.config)
 	}
 
-	flag.Parse()
+	noGenerate = flags.noGenerate
 
-	if *configFlag != "" {
-		configPath = resolvedPath(*configFlag)
-	}
-
-	noGenerate = *noGenerateFlag
-
-	level, err := parseLogLevel(*levelFlag)
+	level, err := parseLogLevel(flags.logLevel)
 	if err != nil {
-		slog.Error("invalid log level", "value", *levelFlag)
+		slog.Error("invalid log level", "value", flags.logLevel)
 		os.Exit(1)
 	}
 
-	notifyLevel, notifyEnabled, err := parseNotifyLevel(*notifyLevelFlag)
+	notifyLevel, notifyEnabled, err := parseNotifyLevel(flags.notifyLevel)
 	if err != nil {
-		slog.Error("invalid notify level", "value", *notifyLevelFlag)
+		slog.Error("invalid notify level", "value", flags.notifyLevel)
 		os.Exit(1)
 	}
 
 	logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
-	if *daemonFlag {
+	if flags.daemon {
 		forkDetach()
 		return
 	}
 
-	logger, err = buildLogger(level, *outputFlag, notifyLevel, notifyEnabled)
+	logger, err = buildLogger(level, flags.logOutput, notifyLevel, notifyEnabled)
 	if err != nil {
-		slog.Error("failed to open log output", "output", *outputFlag, "err", err)
+		slog.Error("failed to open log output", "output", flags.logOutput, "err", err)
 		os.Exit(1)
 	}
 

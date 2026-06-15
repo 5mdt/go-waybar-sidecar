@@ -6,6 +6,19 @@ import (
 	"testing"
 )
 
+func TestIsIgnoredFileBak(t *testing.T) {
+	cases := map[string]bool{
+		"config.jsonc.bak": true,
+		"config.jsonc":     false,
+		"config.yaml":      false,
+	}
+	for name, want := range cases {
+		if got := isIgnoredFile(name); got != want {
+			t.Errorf("isIgnoredFile(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
 func TestReloadKeepsPreviousConfigOnError(t *testing.T) {
 	dir := t.TempDir()
 	badFile := filepath.Join(dir, "config.yaml")

@@ -117,6 +117,10 @@ func isIgnoredFile(name string) bool {
 	if strings.HasSuffix(base, "~") {
 		return true
 	}
+	// sidecar's own backup of the previous output
+	if strings.HasSuffix(base, ".bak") {
+		return true
+	}
 	// vim write-test file (4913, etc.)
 	allDigits := len(base) > 0
 	for _, c := range base {

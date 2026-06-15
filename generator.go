@@ -125,6 +125,10 @@ func writeJSON(waybar map[string]any, menus map[string]menuResult) {
 		waybar[name] = mod
 	}
 
+	if err := backupFile(outJSON); err != nil {
+		logger.Warn("failed to back up previous output", "path", outJSON, "err", err)
+	}
+
 	f, err := os.Create(outJSON)
 	if err != nil {
 		logger.Error("failed to create JSON file", "path", outJSON, "err", err)
@@ -140,6 +144,19 @@ func writeJSON(waybar map[string]any, menus map[string]menuResult) {
 	}
 
 	logger.Debug("JSON written", "path", outJSON)
+}
+
+// backupFile renames path to path+".bak" if it exists, preserving the
+// previous output in case the new one is broken. It is a no-op if path does
+// not exist.
+func backupFile(path string) error {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return os.Rename(path, path+".bak")
 }
 
 func addNode(parent *etree.Element, item MenuItem, actions map[string]string) {

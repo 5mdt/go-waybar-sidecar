@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -101,6 +102,70 @@ func TestBuildXMLAndWriteJSON(t *testing.T) {
 	}
 	if _, ok := clock["menu-file"]; ok {
 		t.Error("clock should not have menu-file")
+	}
+}
+
+func TestBackupFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.jsonc")
+	bak := path + ".bak"
+
+	// no-op when the file does not exist
+	if err := backupFile(path); err != nil {
+		t.Fatalf("backupFile on missing file: %v", err)
+	}
+	if _, err := os.Stat(bak); !os.IsNotExist(err) {
+		t.Errorf("expected no %s, err = %v", bak, err)
+	}
+
+	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := backupFile(path); err != nil {
+		t.Fatalf("backupFile: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("expected %s to be renamed away, err = %v", path, err)
+	}
+	data, err := os.ReadFile(bak)
+	if err != nil {
+		t.Fatalf("reading backup: %v", err)
+	}
+	if string(data) != "old" {
+		t.Errorf("backup content = %q, want %q", data, "old")
+	}
+}
+
+func TestWriteJSONBacksUpPreviousOutput(t *testing.T) {
+	dir := t.TempDir()
+
+	origMenuDir, origOutJSON := menuDir, outJSON
+	menuDir = filepath.Join(dir, "gtk3-menus")
+	outJSON = filepath.Join(dir, "config.jsonc")
+	defer func() { menuDir, outJSON = origMenuDir, origOutJSON }()
+
+	if err := os.MkdirAll(menuDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	writeJSON(map[string]any{"clock": map[string]any{"format": "first"}}, nil)
+	writeJSON(map[string]any{"clock": map[string]any{"format": "second"}}, nil)
+
+	bakData, err := os.ReadFile(outJSON + ".bak")
+	if err != nil {
+		t.Fatalf("reading backup: %v", err)
+	}
+	if !strings.Contains(string(bakData), "first") {
+		t.Errorf("backup content = %s, want it to contain %q", bakData, "first")
+	}
+
+	curData, err := os.ReadFile(outJSON)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	if !strings.Contains(string(curData), "second") {
+		t.Errorf("output content = %s, want it to contain %q", curData, "second")
 	}
 }
 

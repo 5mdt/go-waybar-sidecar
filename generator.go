@@ -79,7 +79,7 @@ func buildXML(cfg Config) map[string]menuResult {
 		path := filepath.Join(menuDir, menuFileName(name))
 		if err := doc.WriteToFile(path); err != nil {
 			logger.Error("failed to write XML", "path", path, "err", err)
-			os.Exit(1)
+			continue
 		}
 
 		logger.Debug("XML written", "path", path, "menu", name, "actions", len(menuActions))
@@ -128,7 +128,7 @@ func writeJSON(waybar map[string]any, menus map[string]menuResult) {
 	f, err := os.Create(outJSON)
 	if err != nil {
 		logger.Error("failed to create JSON file", "path", outJSON, "err", err)
-		os.Exit(1)
+		return
 	}
 	defer f.Close()
 
@@ -136,7 +136,7 @@ func writeJSON(waybar map[string]any, menus map[string]menuResult) {
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(waybar); err != nil {
 		logger.Error("failed to encode JSON", "path", outJSON, "err", err)
-		os.Exit(1)
+		return
 	}
 
 	logger.Debug("JSON written", "path", outJSON)

@@ -47,10 +47,7 @@ func watch(cfg *Config) {
 				timer.Stop()
 			}
 			timer = time.AfterFunc(200*time.Millisecond, func() {
-				if !noGenerate {
-					*cfg = loadConfig()
-				}
-				generate(*cfg)
+				reload(cfg)
 			})
 			timerMu.Unlock()
 
@@ -58,6 +55,21 @@ func watch(cfg *Config) {
 			logger.Warn("watcher error", "err", err)
 		}
 	}
+}
+
+// reload loads the latest config and regenerates outputs. If loading fails
+// (e.g. invalid YAML), the previous *cfg is kept and generation runs against
+// it instead of exiting (see GWS-0017).
+func reload(cfg *Config) {
+	if !noGenerate {
+		newCfg, err := loadConfig()
+		if err != nil {
+			logger.Error("reload failed, keeping previous config", "err", err)
+			return
+		}
+		*cfg = newCfg
+	}
+	generate(*cfg)
 }
 
 func addWatch(w *fsnotify.Watcher, p string) {

@@ -124,7 +124,16 @@ func run() {
 	var cfg Config
 	if !noGenerate {
 		ensureConfig()
-		cfg = loadConfig()
+		var err error
+		cfg, err = loadConfig()
+		if err != nil {
+			logger.Error("failed to load config, falling back to default", "err", err)
+			cfg, err = parseConfig(defaultConfig)
+			if err != nil {
+				logger.Error("failed to parse default config", "err", err)
+				os.Exit(1)
+			}
+		}
 	}
 	generate(cfg)
 	go watch(&cfg)

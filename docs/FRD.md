@@ -18,13 +18,14 @@
 - [GWS-0014. Configurable config path](features/GWS-0014-configurable-config-path.md) - `#config` `#cli`
 - [GWS-0015. Multiple menu support across waybar modules](features/GWS-0015-multiple-menu-support.md) - `#config-generation` `#menu`
 - [GWS-0016. Watch-only mode (--no-generate)](features/GWS-0016-watch-only-no-generate-mode.md) - `#config-generation` `#reload` `#cli`
+- [GWS-0017. Fault-tolerant config reload](features/GWS-0017-fault-tolerant-reload.md) - `#config` `#reload` `#process-lifecycle`
 
 ## Tags
 
-- `#config`: GWS-0004, GWS-0005, GWS-0014
+- `#config`: GWS-0004, GWS-0005, GWS-0014, GWS-0017
 - `#config-generation`: GWS-0001, GWS-0002, GWS-0004, GWS-0015, GWS-0016
 - `#menu`: GWS-0002, GWS-0003, GWS-0015
-- `#reload`: GWS-0005, GWS-0006, GWS-0007, GWS-0016
-- `#process-lifecycle`: GWS-0006, GWS-0007, GWS-0008, GWS-0009, GWS-0010, GWS-0012
+- `#reload`: GWS-0005, GWS-0006, GWS-0007, GWS-0016, GWS-0017
+- `#process-lifecycle`: GWS-0006, GWS-0007, GWS-0008, GWS-0009, GWS-0010, GWS-0012, GWS-0017
 - `#logging`: GWS-0011, GWS-0013
 - `#cli`: GWS-0010, GWS-0011, GWS-0014, GWS-0016

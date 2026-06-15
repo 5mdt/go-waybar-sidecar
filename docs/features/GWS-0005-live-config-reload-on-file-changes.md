@@ -23,8 +23,9 @@ edits.
     files (`.swp`/`.swo`/`.swn`/`~` suffix) and vim's all-numeric write-test
     files (e.g. `4913`).
   - Otherwise logs the change and (re)starts a 200ms debounce timer. When the
-    timer fires, it calls `loadConfig()` and `generate()` with the result
-    stored back into `*cfg`.
+    timer fires, it calls `reload(cfg)`, which calls `loadConfig()` and
+    `generate()` with the result stored back into `*cfg`; if `loadConfig()`
+    fails, the previous `*cfg` is kept (see GWS-0017).
 - Watcher errors are logged at warn and do not stop the loop.
 
 ## Configuration

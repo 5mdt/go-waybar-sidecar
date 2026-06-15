@@ -44,7 +44,10 @@ waybar:
 	configPath = cfgFile
 	defer func() { configPath = origConfigPath }()
 
-	cfg := loadConfig()
+	cfg, err := loadConfig()
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
 
 	if len(cfg.Menus) != 2 {
 		t.Fatalf("expected 2 menus, got %d: %v", len(cfg.Menus), cfg.Menus)
@@ -72,5 +75,28 @@ waybar:
 
 	if _, ok := cfg.Waybar["layer"]; !ok {
 		t.Fatal("expected layer key in waybar config")
+	}
+}
+
+func TestParseConfigInvalid(t *testing.T) {
+	_, err := parseConfig([]byte("waybar: [this is not a map"))
+	if err == nil {
+		t.Fatal("expected error for malformed YAML, got nil")
+	}
+}
+
+func TestParseConfigDefault(t *testing.T) {
+	if _, err := parseConfig(defaultConfig); err != nil {
+		t.Fatalf("parseConfig(defaultConfig) error = %v", err)
+	}
+}
+
+func TestLoadConfigMissingFile(t *testing.T) {
+	origConfigPath := configPath
+	configPath = filepath.Join(t.TempDir(), "does-not-exist.yaml")
+	defer func() { configPath = origConfigPath }()
+
+	if _, err := loadConfig(); err == nil {
+		t.Fatal("expected error for missing config file, got nil")
 	}
 }

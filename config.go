@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -73,19 +74,32 @@ func ensureConfig() {
 	}
 }
 
-func loadConfig() Config {
+func loadConfig() (Config, error) {
 	logger.Debug("loading config", "path", configPath)
 
 	b, err := os.ReadFile(configPath)
 	if err != nil {
-		logger.Error("failed to read config", "path", configPath, "err", err)
-		os.Exit(1)
+		return Config{}, fmt.Errorf("read config %s: %w", configPath, err)
 	}
 
+	cfg, err := parseConfig(b)
+	if err != nil {
+		return Config{}, err
+	}
+
+	logger.Debug("config loaded",
+		"waybar_keys", len(cfg.Waybar),
+		"menus", len(cfg.Menus),
+	)
+	return cfg, nil
+}
+
+// parseConfig decodes raw config.yaml bytes into a Config, extracting each
+// module's menu_definition (if any) into cfg.Menus.
+func parseConfig(b []byte) (Config, error) {
 	var raw rawConfig
 	if err := yaml.Unmarshal(b, &raw); err != nil {
-		logger.Error("failed to parse config", "path", configPath, "err", err)
-		os.Exit(1)
+		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
 
 	menus := map[string][]MenuItem{}
@@ -101,25 +115,17 @@ func loadConfig() Config {
 
 		mb, err := yaml.Marshal(md)
 		if err != nil {
-			logger.Error("failed to parse menu_definition", "module", name, "err", err)
-			os.Exit(1)
+			return Config{}, fmt.Errorf("parse menu_definition for %s: %w", name, err)
 		}
 		var items []MenuItem
 		if err := yaml.Unmarshal(mb, &items); err != nil {
-			logger.Error("failed to parse menu_definition", "module", name, "err", err)
-			os.Exit(1)
+			return Config{}, fmt.Errorf("parse menu_definition for %s: %w", name, err)
 		}
 		menus[name] = items
 	}
 
-	cfg := Config{
+	return Config{
 		Waybar: raw.Waybar,
 		Menus:  menus,
-	}
-
-	logger.Debug("config loaded",
-		"waybar_keys", len(cfg.Waybar),
-		"menus", len(cfg.Menus),
-	)
-	return cfg
+	}, nil
 }

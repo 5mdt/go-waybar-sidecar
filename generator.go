@@ -54,6 +54,15 @@ func menuFileName(module string) string {
 func buildXML(cfg Config) map[string]menuResult {
 	results := make(map[string]menuResult, len(cfg.Menus))
 
+	if len(cfg.Menus) == 0 {
+		return results
+	}
+
+	if err := os.MkdirAll(menuDir, 0o755); err != nil {
+		logger.Error("failed to create menu output dir", "path", menuDir, "err", err)
+		return results
+	}
+
 	names := make([]string, 0, len(cfg.Menus))
 	for name := range cfg.Menus {
 		names = append(names, name)

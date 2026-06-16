@@ -21,6 +21,24 @@ func TestMenuFileName(t *testing.T) {
 	}
 }
 
+func TestBuildXMLCreatesMenuDir(t *testing.T) {
+	dir := t.TempDir()
+
+	origMenuDir := menuDir
+	menuDir = filepath.Join(dir, "gtk3-menus")
+	defer func() { menuDir = origMenuDir }()
+
+	cfg := Config{
+		Waybar: map[string]any{},
+		Menus:  map[string][]MenuItem{"custom/Start": {{Name: "Terminal", Action: "foot"}}},
+	}
+	buildXML(cfg)
+
+	if _, err := os.Stat(menuDir); err != nil {
+		t.Errorf("expected menuDir to be created, got: %v", err)
+	}
+}
+
 func TestBuildXMLAndWriteJSON(t *testing.T) {
 	dir := t.TempDir()
 
@@ -28,10 +46,6 @@ func TestBuildXMLAndWriteJSON(t *testing.T) {
 	menuDir = filepath.Join(dir, "gtk3-menus")
 	outJSON = filepath.Join(dir, "config.jsonc")
 	defer func() { menuDir, outJSON = origMenuDir, origOutJSON }()
-
-	if err := os.MkdirAll(menuDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
 
 	cfg := Config{
 		Waybar: map[string]any{

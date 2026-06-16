@@ -18,7 +18,7 @@ func watch(cfg *Config) {
 	}
 	defer w.Close()
 
-	for _, p := range []string{configPath, waybarDir} {
+	for _, p := range []string{gwsDir, waybarDir} {
 		addWatch(w, p)
 	}
 

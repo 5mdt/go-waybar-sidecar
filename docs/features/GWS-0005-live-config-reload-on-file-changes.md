@@ -32,7 +32,7 @@ edits.
 
 ## Configuration
 
-- Watched paths: `configPath` (`~/.config/waybar/config.yaml`) and
+- Watched paths: `gwsDir` (`~/.config/go-waybar-sidecar`, recursively) and
   `waybarDir` (`~/.config/waybar`, recursively).
 - Debounce interval: 200ms (hardcoded).
 

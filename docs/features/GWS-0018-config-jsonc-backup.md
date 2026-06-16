@@ -16,8 +16,9 @@ reload loops.
 - `backupFile(path)` renames `path` to `path + ".bak"` if `path` exists; if
   `path` does not exist, it is a no-op.
 
-`watcher.go` `isIgnoredFile()`:
-- Returns true for any file ending in `.bak`.
+`watcher.go` `isWatchedFile()`:
+- `.bak` files are not whitelisted (they are not `.json`/`.jsonc`/`.css`),
+  so they are implicitly excluded from triggering reloads.
 
 ## Configuration
 
@@ -39,7 +40,7 @@ reload loops.
   and the original path no longer exists.
 - `backupFile()` on a non-existent file: assert no error and no `.bak` file
   is created.
-- `isIgnoredFile()`: assert true for `config.jsonc.bak`.
+- `isWatchedFile()`: assert false for `config.jsonc.bak` (covered by `TestIsWatchedFile` in `watcher_test.go`).
 
 ### Integration Testing
 

@@ -19,9 +19,11 @@ edits.
   - Ignores ops other than Write/Create/Remove/Rename (`isRelevantOp()`).
   - Ignores events on the sidecar's own outputs (`outJSON`, and any file
     under `menuDir`), to avoid reacting to its own writes.
-  - Ignores editor artifact files via `isIgnoredFile()`: vim swap/backup
-    files (`.swp`/`.swo`/`.swn`/`~` suffix) and vim's all-numeric write-test
-    files (e.g. `4913`).
+  - Ignores files not in the per-directory whitelist via `isWatchedFile()`:
+    files under `gwsDir` must have extension `.yaml` or `.yml`; all other
+    files under `waybarDir` must have extension `.json`, `.jsonc`, or `.css`.
+    Editor artifacts (`.swp`, `~`, `.bak`, all-numeric names, etc.) are
+    implicitly excluded as their extensions are not whitelisted.
   - Otherwise logs the change and (re)starts a 200ms debounce timer. When the
     timer fires, it calls `reload(cfg)`, which calls `loadConfig()` and
     `generate()` with the result stored back into `*cfg`; if `loadConfig()`
@@ -53,8 +55,11 @@ edits.
 
 - `isRelevantOp()`: assert true for Write/Create/Remove/Rename and false for
   Chmod.
-- `isIgnoredFile()`: assert true for `.foo.swp`, `.foo.swo`, `.foo.swn`,
-  `foo~`, and `4913`; assert false for `config.yaml`.
+- `isWatchedFile()` under `waybarDir`: assert true for `config.jsonc`,
+  `style.css`, `foo.json`; assert false for `config.yaml`, `config.jsonc.bak`,
+  `4913`, `style.css~`.
+- `isWatchedFile()` under `gwsDir`: assert true for `config.yaml`, `foo.yml`;
+  assert false for `config.json`, `.config.yaml.swp`, `config.yaml~`.
 
 ### Integration Testing
 

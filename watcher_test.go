@@ -6,15 +6,40 @@ import (
 	"testing"
 )
 
-func TestIsIgnoredFileBak(t *testing.T) {
-	cases := map[string]bool{
-		"config.jsonc.bak": true,
-		"config.jsonc":     false,
-		"config.yaml":      false,
+func TestIsWatchedFile(t *testing.T) {
+	dir := t.TempDir()
+	origWaybarDir, origGwsDir := waybarDir, gwsDir
+	waybarDir = dir
+	gwsDir = filepath.Join(dir, "go-waybar-sidecar")
+	defer func() {
+		waybarDir, gwsDir = origWaybarDir, origGwsDir
+	}()
+
+	waybarCases := map[string]bool{
+		filepath.Join(dir, "config.jsonc"):     true,
+		filepath.Join(dir, "style.css"):        true,
+		filepath.Join(dir, "foo.json"):         true,
+		filepath.Join(dir, "config.yaml"):      false,
+		filepath.Join(dir, "config.jsonc.bak"): false,
+		filepath.Join(dir, "4913"):             false,
+		filepath.Join(dir, "style.css~"):       false,
 	}
-	for name, want := range cases {
-		if got := isIgnoredFile(name); got != want {
-			t.Errorf("isIgnoredFile(%q) = %v, want %v", name, got, want)
+	for name, want := range waybarCases {
+		if got := isWatchedFile(name); got != want {
+			t.Errorf("isWatchedFile(%q) = %v, want %v", name, got, want)
+		}
+	}
+
+	gwsCases := map[string]bool{
+		filepath.Join(gwsDir, "config.yaml"):       true,
+		filepath.Join(gwsDir, "foo.yml"):           true,
+		filepath.Join(gwsDir, "config.json"):       false,
+		filepath.Join(gwsDir, ".config.yaml.swp"):  false,
+		filepath.Join(gwsDir, "config.yaml~"):      false,
+	}
+	for name, want := range gwsCases {
+		if got := isWatchedFile(name); got != want {
+			t.Errorf("isWatchedFile(%q) = %v, want %v", name, got, want)
 		}
 	}
 }

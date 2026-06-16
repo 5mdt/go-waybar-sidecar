@@ -36,7 +36,7 @@ func watch(cfg *Config) {
 			if e.Name == outJSON || strings.HasPrefix(e.Name, menuDir+string(filepath.Separator)) {
 				continue
 			}
-			if isIgnoredFile(e.Name) {
+			if !isWatchedFile(e.Name) {
 				continue
 			}
 
@@ -105,29 +105,10 @@ func isRelevantOp(op fsnotify.Op) bool {
 	return op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0
 }
 
-func isIgnoredFile(name string) bool {
-	base := filepath.Base(name)
-	// vim swap/backup files
-	if strings.HasPrefix(base, ".") && (strings.HasSuffix(base, ".swp") ||
-		strings.HasSuffix(base, ".swo") ||
-		strings.HasSuffix(base, ".swn")) {
-		return true
+func isWatchedFile(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	if strings.HasPrefix(name, gwsDir+string(filepath.Separator)) {
+		return ext == ".yaml" || ext == ".yml"
 	}
-	// vim backup
-	if strings.HasSuffix(base, "~") {
-		return true
-	}
-	// sidecar's own backup of the previous output
-	if strings.HasSuffix(base, ".bak") {
-		return true
-	}
-	// vim write-test file (4913, etc.)
-	allDigits := len(base) > 0
-	for _, c := range base {
-		if c < '0' || c > '9' {
-			allDigits = false
-			break
-		}
-	}
-	return allDigits
+	return ext == ".json" || ext == ".jsonc" || ext == ".css"
 }

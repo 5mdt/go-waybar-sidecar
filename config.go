@@ -29,7 +29,8 @@ type rawConfig struct {
 
 var (
 	waybarDir  = resolvedPath(filepath.Join(os.Getenv("HOME"), ".config/waybar"))
-	configPath = filepath.Join(waybarDir, "go-waybar-sidecar", "config.yaml")
+	gwsDir     = filepath.Join(waybarDir, "go-waybar-sidecar")
+	configPath = filepath.Join(gwsDir, "config.yaml")
 
 	menuDir = filepath.Join(waybarDir, "gtk3-menus")
 	outJSON = filepath.Join(waybarDir, "config.jsonc")

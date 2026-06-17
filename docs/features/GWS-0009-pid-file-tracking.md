@@ -4,8 +4,7 @@
 
 ## Description
 
-The sidecar records the PIDs of itself and the Waybar process it manages in a
-shared state directory, so they can be inspected externally and so
+The sidecar records its own PID in a shared state directory so
 GWS-0008's takeover logic has a PID to check.
 
 ## Implementation
@@ -16,17 +15,17 @@ GWS-0008's takeover logic has a PID to check.
 - Logs at debug on success, at error (without exiting) on failure to create
   the directory or write the file.
 
-Called with two names:
+Called with one name:
 - `"waybar-sidecar"` - written once at startup in `run()` with the sidecar's
   own `os.Getpid()`.
-- `"waybar"` - written by `reloadWaybar()` (`waybar.go`) whenever a Waybar
-  PID is confirmed, whether via SIGUSR2 reload (GWS-0006) or cold start
-  (GWS-0007).
+
+The Waybar process PID is not stored — `waybarPID()` discovers it fresh via
+`pgrep -x waybar` on every reload (GWS-0006, GWS-0007).
 
 ## Configuration
 
 - `pidDir` = `~/.local/state/waybar`.
-- Files: `waybar-sidecar.pid`, `waybar.pid`.
+- Files: `waybar-sidecar.pid`.
 
 ## Testing
 
@@ -34,8 +33,6 @@ Called with two names:
 
 - Start the sidecar and confirm `~/.local/state/waybar/waybar-sidecar.pid`
   contains its PID (matches `pgrep -f go-waybar-sidecar`).
-- Confirm `~/.local/state/waybar/waybar.pid` contains the running Waybar
-  process's PID after the first generation.
 
 ### Unit Testing
 

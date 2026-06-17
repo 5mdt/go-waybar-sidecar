@@ -31,11 +31,11 @@ func TestIsWatchedFile(t *testing.T) {
 	}
 
 	gwsCases := map[string]bool{
-		filepath.Join(gwsDir, "config.yaml"):       true,
-		filepath.Join(gwsDir, "foo.yml"):           true,
-		filepath.Join(gwsDir, "config.json"):       false,
-		filepath.Join(gwsDir, ".config.yaml.swp"):  false,
-		filepath.Join(gwsDir, "config.yaml~"):      false,
+		filepath.Join(gwsDir, "config.yaml"):      true,
+		filepath.Join(gwsDir, "foo.yml"):          true,
+		filepath.Join(gwsDir, "config.json"):      false,
+		filepath.Join(gwsDir, ".config.yaml.swp"): false,
+		filepath.Join(gwsDir, "config.yaml~"):     false,
 	}
 	for name, want := range gwsCases {
 		if got := isWatchedFile(name); got != want {

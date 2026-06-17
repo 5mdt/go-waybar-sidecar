@@ -19,12 +19,12 @@ fails or finds no running instance:
   true}` so it survives the sidecar's own exit/restart and is not killed by
   signals sent to the sidecar's process group.
 - Polls up to 4 times, 500ms apart (2s total), calling `waybarPID()`. On the
-  first successful detection:
-  - Logs "waybar started" with the new PID.
-  - Saves the PID via `savePID("waybar", alive)` (GWS-0009).
-  - Returns.
-- If still not detected after 2s, logs an error "waybar failed to start
-  within 2s".
+  first successful detection, logs "waybar started" with the PID and returns.
+- If the poll detects nothing, performs one final `waybarPID()` check. A
+  waybar process may already be running under a different PID (e.g. one that
+  was started externally, or whose PID `pgrep` returned too slowly). If found,
+  logs "waybar started" and returns.
+- Only if still not detected logs an error "waybar failed to start within 2s".
 
 ## Configuration
 
@@ -51,11 +51,14 @@ fails or finds no running instance:
 ### Integration Testing
 
 - With no `waybar` process running, run `reloadWaybar()` against a `PATH`
-  containing a stub `waybar` binary that stays alive: assert the stub starts,
-  `waybarPID()` returns its PID, and it's saved via `savePID("waybar", ...)`.
+  containing a stub `waybar` binary that stays alive: assert the stub starts
+  and `waybarPID()` returns its PID within the poll window (no error logged).
+- With a stub `waybar` detectable only after the poll window (appears just
+  before the final check): assert `reloadWaybar()` logs "waybar started" and
+  does not log "waybar failed to start within 2s".
 - With `PATH` containing no `waybar` binary: assert `reloadWaybar()` logs
   "failed to start waybar" and returns without panicking.
-- With a stub `waybar` that never reaches a running state within 2s: assert
+- With a stub `waybar` that never reaches a running state: assert
   `reloadWaybar()` logs "waybar failed to start within 2s".
 
 ## Status

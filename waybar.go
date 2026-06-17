@@ -10,13 +10,22 @@ import (
 	"time"
 )
 
+// coldStartPollAttempts and the sleep durations are vars so tests can shorten them.
+var (
+	coldStartPollAttempts = 4
+	coldStartPollSleep    = 500 * time.Millisecond
+	coldStartKillSleep    = 200 * time.Millisecond
+)
+
+// waybarPIDFn is an indirection over waybarPID so tests can stub it.
+var waybarPIDFn = waybarPID
+
 func reloadWaybar() {
-	if pid := waybarPID(); pid != 0 {
+	if pid := waybarPIDFn(); pid != 0 {
 		if err := syscall.Kill(pid, syscall.SIGUSR2); err == nil {
 			logger.Info("waybar reloaded via USR2", "pid", pid)
-			savePID("waybar", pid)
 			time.Sleep(500 * time.Millisecond)
-			if waybarPID() != 0 {
+			if waybarPIDFn() != 0 {
 				return
 			}
 			logger.Warn("waybar died after reload, falling back to cold start")
@@ -25,7 +34,7 @@ func reloadWaybar() {
 
 	logger.Warn("waybar not running, performing cold start")
 	exec.Command("pkill", "-x", "waybar").Run()
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(coldStartKillSleep)
 
 	cmd := exec.Command("waybar")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
@@ -34,13 +43,18 @@ func reloadWaybar() {
 		return
 	}
 
-	for i := 0; i < 4; i++ {
-		time.Sleep(500 * time.Millisecond)
-		if alive := waybarPID(); alive != 0 {
+	for i := 0; i < coldStartPollAttempts; i++ {
+		time.Sleep(coldStartPollSleep)
+		if alive := waybarPIDFn(); alive != 0 {
 			logger.Info("waybar started", "pid", alive)
-			savePID("waybar", alive)
 			return
 		}
+	}
+	// Final check: waybar may have started under a different PID than we
+	// launched, or pgrep was briefly slow during the poll window.
+	if alive := waybarPIDFn(); alive != 0 {
+		logger.Info("waybar started", "pid", alive)
+		return
 	}
 	logger.Error("waybar failed to start within 2s")
 }

@@ -16,8 +16,7 @@ avoiding a full restart when possible.
   taking the first PID from the output and validating it with
   `isRealWaybar()` (not a zombie, and `/proc/<pid>/exe` ends in `/waybar`).
 - If a valid PID is found, sends `SIGUSR2` to it. On success:
-  - Logs "waybar reloaded via USR2" and saves the PID via `savePID("waybar",
-    pid)` (GWS-0009).
+  - Logs "waybar reloaded via USR2".
   - Waits 500ms, then re-checks `waybarPID()`. If Waybar is still running,
     returns - reload succeeded.
   - If Waybar is no longer running, logs a warning and falls through to cold
@@ -48,8 +47,8 @@ None.
 ### Integration Testing
 
 - Launch a long-running stub binary named `waybar` that ignores `SIGUSR2`,
-  run `reloadWaybar()`, and assert it logs a successful reload and
-  `savePID("waybar", ...)` is called with the stub's PID.
+  run `reloadWaybar()`, and assert it logs "waybar reloaded via USR2" with
+  the stub's PID.
 - Launch a stub `waybar` that exits on `SIGUSR2`, run `reloadWaybar()`, and
   assert it falls through to the cold-start path (GWS-0007).
 

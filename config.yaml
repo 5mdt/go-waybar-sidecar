@@ -1,3 +1,10 @@
+sidecar:
+  log-level: info
+  log-output: stdout
+  notify-level: error
+  no-generate: false
+  daemon: false
+
 waybar:
   layer: top
   position: top

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -24,7 +27,244 @@ type Config struct {
 }
 
 type rawConfig struct {
-	Waybar map[string]any `yaml:"waybar"`
+	Waybar  map[string]any   `yaml:"waybar"`
+	Sidecar *sidecarSettings `yaml:"sidecar"`
+}
+
+// sidecarSettings holds runtime settings from the sidecar: section of config.yaml.
+// Pointer fields distinguish "absent" (nil) from "set to zero value".
+type sidecarSettings struct {
+	LogLevel    *string `yaml:"log-level"`
+	LogOutput   *string `yaml:"log-output"`
+	NotifyLevel *string `yaml:"notify-level"`
+	NoGenerate  *bool   `yaml:"no-generate"`
+	Daemon      *bool   `yaml:"daemon"`
+}
+
+// resolvedSettings is the merged result of defaults < config file < env < flags.
+type resolvedSettings struct {
+	logLevel    string
+	logOutput   string
+	notifyLevel string
+	noGenerate  bool
+	daemon      bool
+}
+
+const (
+	defaultLogLevel    = "info"
+	defaultLogOutput   = "stdout"
+	defaultNotifyLevel = "error"
+	defaultNoGenerate  = false
+	defaultDaemon      = false
+)
+
+// loadSettings reads the sidecar: section from path.
+// Returns an empty sidecarSettings (all nil) when the file is missing or has
+// no sidecar: key — callers fall back to env vars and defaults.
+func loadSettings(path string) sidecarSettings {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return sidecarSettings{}
+	}
+	var raw rawConfig
+	if err := yaml.Unmarshal(b, &raw); err != nil {
+		return sidecarSettings{}
+	}
+	if raw.Sidecar == nil {
+		return sidecarSettings{}
+	}
+	return *raw.Sidecar
+}
+
+// resolveConfigPath applies: default configPath < GO_WAYBAR_SIDECAR_CONFIG < --config flag.
+func resolveConfigPath(f cliFlags, set map[string]bool) string {
+	path := configPath
+	if v, ok := os.LookupEnv("GO_WAYBAR_SIDECAR_CONFIG"); ok && v != "" {
+		path = v
+	}
+	if set["config"] {
+		path = f.config
+	}
+	return resolvedPath(path)
+}
+
+// parseBoolEnv parses a boolean env-var value, extending strconv.ParseBool
+// with "yes" (true) and "no" (false), case-insensitive.
+func parseBoolEnv(v string) (bool, bool) {
+	switch strings.ToLower(v) {
+	case "yes":
+		return true, true
+	case "no":
+		return false, true
+	}
+	b, err := strconv.ParseBool(v)
+	return b, err == nil
+}
+
+// resolveSettings applies: defaults < config file < env vars < CLI flags.
+func resolveSettings(f cliFlags, set map[string]bool, s sidecarSettings) resolvedSettings {
+	r := resolvedSettings{
+		logLevel:    defaultLogLevel,
+		logOutput:   defaultLogOutput,
+		notifyLevel: defaultNotifyLevel,
+		noGenerate:  defaultNoGenerate,
+		daemon:      defaultDaemon,
+	}
+
+	// Config file overrides defaults.
+	if s.LogLevel != nil {
+		r.logLevel = *s.LogLevel
+	}
+	if s.LogOutput != nil {
+		r.logOutput = *s.LogOutput
+	}
+	if s.NotifyLevel != nil {
+		r.notifyLevel = *s.NotifyLevel
+	}
+	if s.NoGenerate != nil {
+		r.noGenerate = *s.NoGenerate
+	}
+	if s.Daemon != nil {
+		r.daemon = *s.Daemon
+	}
+
+	// Env vars override config file.
+	if v, ok := os.LookupEnv("GO_WAYBAR_SIDECAR_LOG_LEVEL"); ok {
+		r.logLevel = v
+	}
+	if v, ok := os.LookupEnv("GO_WAYBAR_SIDECAR_LOG_OUTPUT"); ok {
+		r.logOutput = v
+	}
+	if v, ok := os.LookupEnv("GO_WAYBAR_SIDECAR_NOTIFY_LEVEL"); ok {
+		r.notifyLevel = v
+	}
+	if v, ok := os.LookupEnv("GO_WAYBAR_SIDECAR_NO_GENERATE"); ok {
+		if b, ok := parseBoolEnv(v); ok {
+			r.noGenerate = b
+		}
+	}
+	if v, ok := os.LookupEnv("GO_WAYBAR_SIDECAR_DAEMON"); ok {
+		if b, ok := parseBoolEnv(v); ok {
+			r.daemon = b
+		}
+	}
+
+	// CLI flags override env vars.
+	if set["log-level"] {
+		r.logLevel = f.logLevel
+	}
+	if set["log-output"] {
+		r.logOutput = f.logOutput
+	}
+	if set["notify-level"] {
+		r.notifyLevel = f.notifyLevel
+	}
+	if set["no-generate"] {
+		r.noGenerate = f.noGenerate
+	}
+	if set["daemon"] {
+		r.daemon = f.daemon
+	}
+
+	return r
+}
+
+// sidecarDefaults lists the five sidecar settings in display order.
+// Used by ensureSettings to fill absent keys with built-in defaults.
+var sidecarDefaults = []struct{ key, tag, value string }{
+	{"log-level", "!!str", defaultLogLevel},
+	{"log-output", "!!str", defaultLogOutput},
+	{"notify-level", "!!str", defaultNotifyLevel},
+	{"no-generate", "!!bool", strconv.FormatBool(defaultNoGenerate)},
+	{"daemon", "!!bool", strconv.FormatBool(defaultDaemon)},
+}
+
+// ensureSettings fills any absent sidecar: keys in path with their built-in
+// defaults. Existing keys (including non-default user values) are never
+// changed. The file is only written (and backed up to path+".bak") when at
+// least one key is actually added. Comments and the waybar: section are
+// preserved via yaml.Node AST manipulation. Returns nil on missing/unreadable
+// files — callers fall back to the live defaults instead.
+func ensureSettings(path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil // missing file is not an error here
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(b, &doc); err != nil || doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return nil // unparseable; leave file untouched
+	}
+
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
+
+	// Find or create the sidecar mapping in the root map.
+	var sidecarMap *yaml.Node
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value == "sidecar" {
+			val := root.Content[i+1]
+			if val.Kind != yaml.MappingNode {
+				// Replace null / scalar with an empty mapping.
+				val.Kind = yaml.MappingNode
+				val.Tag = "!!map"
+				val.Value = ""
+				val.Content = nil
+			}
+			sidecarMap = val
+			break
+		}
+	}
+	if sidecarMap == nil {
+		keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "sidecar"}
+		sidecarMap = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		root.Content = append(root.Content, keyNode, sidecarMap)
+	}
+
+	// Collect keys already present in the sidecar mapping.
+	existing := make(map[string]bool, len(sidecarMap.Content)/2)
+	for i := 0; i+1 < len(sidecarMap.Content); i += 2 {
+		existing[sidecarMap.Content[i].Value] = true
+	}
+
+	// Append missing keys with their built-in defaults.
+	added := 0
+	for _, d := range sidecarDefaults {
+		if existing[d.key] {
+			continue
+		}
+		sidecarMap.Content = append(sidecarMap.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: d.key},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: d.tag, Value: d.value},
+		)
+		added++
+	}
+
+	if added == 0 {
+		return nil // nothing to do
+	}
+
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(&doc); err != nil {
+		return fmt.Errorf("encode settings: %w", err)
+	}
+	if err := enc.Close(); err != nil {
+		return fmt.Errorf("close encoder: %w", err)
+	}
+
+	if err := backupFile(path); err != nil {
+		return fmt.Errorf("backup config before settings fill: %w", err)
+	}
+
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		return fmt.Errorf("write settings: %w", err)
+	}
+
+	return nil
 }
 
 var (

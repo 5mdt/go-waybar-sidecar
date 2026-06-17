@@ -22,19 +22,22 @@ type cliFlags struct {
 	noGenerate  bool
 }
 
-func parseFlags() cliFlags {
+func parseFlags() (cliFlags, map[string]bool) {
 	var f cliFlags
-	flag.StringVar(&f.logLevel, "log-level", "info", "log level: debug, info, warn, error")
-	flag.StringVar(&f.logOutput, "log-output", "stdout", "log destination: stdout, stderr, or a file path")
-	flag.StringVar(&f.notifyLevel, "notify-level", "error", "notification threshold: off, debug, info, warn, error")
+	flag.StringVar(&f.logLevel, "log-level", defaultLogLevel, "log level: debug, info, warn, error")
+	flag.StringVar(&f.logOutput, "log-output", defaultLogOutput, "log destination: stdout, stderr, or a file path")
+	flag.StringVar(&f.notifyLevel, "notify-level", defaultNotifyLevel, "notification threshold: off, debug, info, warn, error")
 	flag.StringVar(&f.config, "config", "", "path to config.yaml (default: "+configPath+")")
-	flag.BoolVar(&f.daemon, "daemon", false, "fork to background")
-	flag.BoolVar(&f.noGenerate, "no-generate", false, "watch and reload waybar without generating config.jsonc/menus from config.yaml")
+	flag.BoolVar(&f.daemon, "daemon", defaultDaemon, "fork to background")
+	flag.BoolVar(&f.noGenerate, "no-generate", defaultNoGenerate, "watch and reload waybar without generating config.jsonc/menus from config.yaml")
 
 	flag.Usage = printUsage
 
 	flag.Parse()
-	return f
+
+	set := make(map[string]bool)
+	flag.Visit(func(fl *flag.Flag) { set[fl.Name] = true })
+	return f, set
 }
 
 func printUsage() {
@@ -52,6 +55,22 @@ Flags:
   --no-generate         watch and reload waybar without generating config.jsonc/menus from config.yaml
   --help                show this help
 
+Environment (override config file; flags take precedence over env):
+  GO_WAYBAR_SIDECAR_LOG_LEVEL      overrides --log-level
+  GO_WAYBAR_SIDECAR_LOG_OUTPUT     overrides --log-output
+  GO_WAYBAR_SIDECAR_NOTIFY_LEVEL   overrides --notify-level
+  GO_WAYBAR_SIDECAR_NO_GENERATE    overrides --no-generate  (true/false/yes/no/1/0)
+  GO_WAYBAR_SIDECAR_DAEMON         overrides --daemon       (true/false/yes/no/1/0)
+  GO_WAYBAR_SIDECAR_CONFIG         overrides --config path
+
+Config file settings (sidecar: section in config.yaml, lowest override priority):
+  sidecar:
+    log-level: info
+    log-output: stdout
+    notify-level: error
+    no-generate: false
+    daemon: false
+
 Config:
   Source:   %s
   Menu dir: %s
@@ -61,36 +80,37 @@ Config:
 }
 
 func main() {
-	flags := parseFlags()
+	flags, set := parseFlags()
 
-	if flags.config != "" {
-		configPath = resolvedPath(flags.config)
-	}
+	configPath = resolveConfigPath(flags, set)
 
-	noGenerate = flags.noGenerate
+	sidecar := loadSettings(configPath)
+	resolved := resolveSettings(flags, set, sidecar)
 
-	level, err := parseLogLevel(flags.logLevel)
+	noGenerate = resolved.noGenerate
+
+	level, err := parseLogLevel(resolved.logLevel)
 	if err != nil {
-		slog.Error("invalid log level", "value", flags.logLevel)
+		slog.Error("invalid log level", "value", resolved.logLevel)
 		os.Exit(1)
 	}
 
-	notifyLevel, notifyEnabled, err := parseNotifyLevel(flags.notifyLevel)
+	notifyLevel, notifyEnabled, err := parseNotifyLevel(resolved.notifyLevel)
 	if err != nil {
-		slog.Error("invalid notify level", "value", flags.notifyLevel)
+		slog.Error("invalid notify level", "value", resolved.notifyLevel)
 		os.Exit(1)
 	}
 
 	logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
-	if flags.daemon {
+	if resolved.daemon && os.Getenv("GO_WAYBAR_SIDECAR_FORKED") == "" {
 		forkDetach()
 		return
 	}
 
-	logger, err = buildLogger(level, flags.logOutput, notifyLevel, notifyEnabled)
+	logger, err = buildLogger(level, resolved.logOutput, notifyLevel, notifyEnabled)
 	if err != nil {
-		slog.Error("failed to open log output", "output", flags.logOutput, "err", err)
+		slog.Error("failed to open log output", "output", resolved.logOutput, "err", err)
 		os.Exit(1)
 	}
 
@@ -124,6 +144,9 @@ func run() {
 	var cfg Config
 	if !noGenerate {
 		ensureConfig()
+		if err := ensureSettings(configPath); err != nil {
+			logger.Warn("failed to fill default settings", "err", err)
+		}
 		var err error
 		cfg, err = loadConfig()
 		if err != nil {
@@ -188,6 +211,7 @@ func forkDetach() {
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
+	cmd.Env = append(os.Environ(), "GO_WAYBAR_SIDECAR_FORKED=1")
 
 	if err := cmd.Start(); err != nil {
 		logger.Error("failed to fork", "err", err)

@@ -22,13 +22,15 @@
 - [GWS-0018. Backup of config.jsonc before regeneration (.bak)](features/GWS-0018-config-jsonc-backup.md) - `#config-generation` `#config`
 - [GWS-0019. Config-file and environment-variable settings](features/GWS-0019-config-file-and-env-vars.md) - `#config` `#cli`
 - [GWS-0020. Persist default sidecar settings to config file](features/GWS-0020-persist-default-settings.md) - `#config`
+- [GWS-0021. Symlink, hardlink, and mount handling](features/GWS-0021-symlink-hardlink-mount-handling.md) - `#config` `#filesystem`
 
 ## Tags
 
-- `#config`: GWS-0004, GWS-0005, GWS-0014, GWS-0017, GWS-0018, GWS-0019, GWS-0020
+- `#config`: GWS-0004, GWS-0005, GWS-0014, GWS-0017, GWS-0018, GWS-0019, GWS-0020, GWS-0021
 - `#config-generation`: GWS-0001, GWS-0002, GWS-0004, GWS-0015, GWS-0016, GWS-0018
 - `#menu`: GWS-0002, GWS-0003, GWS-0015
 - `#reload`: GWS-0005, GWS-0006, GWS-0007, GWS-0016, GWS-0017
 - `#process-lifecycle`: GWS-0006, GWS-0007, GWS-0008, GWS-0009, GWS-0010, GWS-0012, GWS-0017
 - `#logging`: GWS-0011, GWS-0013
 - `#cli`: GWS-0010, GWS-0011, GWS-0014, GWS-0016, GWS-0019
+- `#filesystem`: GWS-0021

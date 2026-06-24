@@ -140,6 +140,7 @@ func run() {
 
 	ensureSingleInstance()
 	savePID("waybar-sidecar", os.Getpid())
+	reapDuplicateWaybars()
 
 	var cfg Config
 	if !noGenerate {

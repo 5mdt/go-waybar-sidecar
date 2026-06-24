@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -38,6 +39,15 @@ func setupWaybarTest(t *testing.T) *bytes.Buffer {
 
 	origFn := waybarPIDFn
 	t.Cleanup(func() { waybarPIDFn = origFn })
+
+	origPIDsFn := waybarPIDsFn
+	t.Cleanup(func() { waybarPIDsFn = origPIDsFn })
+
+	origStartTimeFn := procStartTimeFn
+	t.Cleanup(func() { procStartTimeFn = origStartTimeFn })
+
+	origKillFn := killFn
+	t.Cleanup(func() { killFn = origKillFn })
 
 	return &buf
 }
@@ -141,5 +151,102 @@ func TestWaybarPIDNoneRunning(t *testing.T) {
 	// waybarPID (the real impl) must return 0 gracefully when no waybar exists.
 	if pid := waybarPID(); pid != 0 {
 		t.Errorf("waybarPID() = %d, want 0 when waybar is not running", pid)
+	}
+}
+
+// --- GWS-0022: reapDuplicateWaybars tests ---
+
+func TestReapDuplicateWaybarsKillsOlder(t *testing.T) {
+	buf := setupWaybarTest(t)
+
+	// PID 100 started earlier (time 10), PID 200 started later (time 20).
+	waybarPIDsFn = func() []int { return []int{100, 200} }
+	startTimes := map[int]uint64{100: 10, 200: 20}
+	procStartTimeFn = func(pid int) (uint64, error) { return startTimes[pid], nil }
+
+	killed := map[int]syscall.Signal{}
+	killFn = func(pid int, sig syscall.Signal) error {
+		killed[pid] = sig
+		return nil
+	}
+
+	reapDuplicateWaybars()
+
+	if killed[100] != syscall.SIGTERM {
+		t.Errorf("expected SIGTERM to older PID 100, got %v", killed[100])
+	}
+	if _, ok := killed[200]; ok {
+		t.Errorf("newest PID 200 must not be killed")
+	}
+	if !strings.Contains(buf.String(), "killed older waybar instance") {
+		t.Errorf("expected log line, got: %s", buf.String())
+	}
+}
+
+func TestReapDuplicateWaybarsKeepsNewestNotFirst(t *testing.T) {
+	setupWaybarTest(t)
+
+	// PID 100 is the newest (time 30), but pgrep returned it first.
+	waybarPIDsFn = func() []int { return []int{100, 200, 300} }
+	startTimes := map[int]uint64{100: 30, 200: 10, 300: 20}
+	procStartTimeFn = func(pid int) (uint64, error) { return startTimes[pid], nil }
+
+	killed := map[int]syscall.Signal{}
+	killFn = func(pid int, sig syscall.Signal) error {
+		killed[pid] = sig
+		return nil
+	}
+
+	reapDuplicateWaybars()
+
+	if _, ok := killed[100]; ok {
+		t.Errorf("newest PID 100 must not be killed")
+	}
+	if killed[200] != syscall.SIGTERM {
+		t.Errorf("expected SIGTERM to PID 200, got %v", killed[200])
+	}
+	if killed[300] != syscall.SIGTERM {
+		t.Errorf("expected SIGTERM to PID 300, got %v", killed[300])
+	}
+}
+
+func TestReapDuplicateWaybarsSingleInstanceNoop(t *testing.T) {
+	setupWaybarTest(t)
+
+	waybarPIDsFn = func() []int { return []int{100} }
+	procStartTimeFn = func(pid int) (uint64, error) { return 10, nil }
+
+	kills := 0
+	killFn = func(pid int, sig syscall.Signal) error { kills++; return nil }
+
+	reapDuplicateWaybars()
+
+	if kills != 0 {
+		t.Errorf("expected 0 kills for single instance, got %d", kills)
+	}
+}
+
+func TestReapDuplicateWaybarsNoneNoop(t *testing.T) {
+	setupWaybarTest(t)
+
+	waybarPIDsFn = func() []int { return nil }
+
+	kills := 0
+	killFn = func(pid int, sig syscall.Signal) error { kills++; return nil }
+
+	reapDuplicateWaybars()
+
+	if kills != 0 {
+		t.Errorf("expected 0 kills for no instances, got %d", kills)
+	}
+}
+
+func TestProcStartTimeSelf(t *testing.T) {
+	st, err := procStartTime(os.Getpid())
+	if err != nil {
+		t.Fatalf("procStartTime(self) error: %v", err)
+	}
+	if st == 0 {
+		t.Error("procStartTime(self) returned 0, want non-zero")
 	}
 }

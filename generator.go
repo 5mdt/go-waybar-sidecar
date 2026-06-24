@@ -23,6 +23,23 @@ var noGenerate bool
 // doReload is an indirection over reloadWaybar so tests can stub it.
 var doReload = reloadWaybar
 
+// validateMenu is an indirection over validateMenuDoc so tests can stub it.
+var validateMenu = validateMenuDoc
+
+// validateMenuDoc checks that all <object id="..."> elements in doc have
+// unique ids. Returns an error naming the first duplicate, or nil.
+func validateMenuDoc(doc *etree.Document) error {
+	seen := map[string]bool{}
+	for _, el := range doc.Root().FindElements("//object[@id]") {
+		id := el.SelectAttrValue("id", "")
+		if seen[id] {
+			return fmt.Errorf("duplicate element id %q", id)
+		}
+		seen[id] = true
+	}
+	return nil
+}
+
 func generate(cfg Config) {
 	if noGenerate {
 		logger.Debug("generation skipped (--no-generate)")
@@ -80,11 +97,16 @@ func buildXML(cfg Config) map[string]menuResult {
 		menu.CreateAttr("class", "GtkMenu")
 		menu.CreateAttr("id", "menu")
 
+		ids := map[string]int{}
 		for _, item := range cfg.Menus[name] {
-			addNode(menu, item, menuActions)
+			addNode(menu, item, menuActions, ids)
 		}
 
 		doc.Indent(2)
+		if err := validateMenu(doc); err != nil {
+			logger.Error("invalid menu XML, skipping", "menu", name, "err", err)
+			continue
+		}
 		path := filepath.Join(menuDir, menuFileName(name))
 		if err := doc.WriteToFile(path); err != nil {
 			logger.Error("failed to write XML", "path", path, "err", err)
@@ -168,17 +190,31 @@ func backupFile(path string) error {
 	return os.Rename(path, path+".bak")
 }
 
-func addNode(parent *etree.Element, item MenuItem, actions map[string]string) {
+func addNode(parent *etree.Element, item MenuItem, actions map[string]string, ids map[string]int) {
 	child := parent.CreateElement("child")
 	obj := child.CreateElement("object")
+
+	if item.Name == "---" {
+		ids["---"]++
+		obj.CreateAttr("class", "GtkSeparatorMenuItem")
+		obj.CreateAttr("id", fmt.Sprintf("sep%d", ids["---"]))
+		return
+	}
+
+	ids[item.Name]++
+	id := item.Name
+	if ids[item.Name] > 1 {
+		id = fmt.Sprintf("%s_%d", item.Name, ids[item.Name])
+	}
+
 	obj.CreateAttr("class", "GtkMenuItem")
-	obj.CreateAttr("id", item.Name)
+	obj.CreateAttr("id", id)
 	prop := obj.CreateElement("property")
 	prop.CreateAttr("name", "label")
 
 	if len(item.Children) == 0 {
 		prop.SetText(item.Name)
-		actions[item.Name] = item.Action
+		actions[id] = item.Action
 		return
 	}
 
@@ -187,7 +223,7 @@ func addNode(parent *etree.Element, item MenuItem, actions map[string]string) {
 	sub.CreateAttr("type", "submenu")
 	submenu := sub.CreateElement("object")
 	submenu.CreateAttr("class", "GtkMenu")
-	for _, child := range item.Children {
-		addNode(submenu, child, actions)
+	for _, c := range item.Children {
+		addNode(submenu, c, actions, ids)
 	}
 }

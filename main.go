@@ -71,6 +71,13 @@ Config file settings (sidecar: section in config.yaml, lowest override priority)
     no-generate: false
     daemon: false
 
+Periodic jobs (jobs: section in config.yaml):
+  jobs:
+    - name: example
+      every: 5m              # or: schedule: "*/5 * * * *"
+      command: "echo hello"
+      output: ~/.cache/waybar/example  # optional; stdout written here
+
 Config:
   Source:   %s
   Menu dir: %s
@@ -160,6 +167,7 @@ func run() {
 		}
 	}
 	generate(cfg)
+	jobs.restart(cfg.Jobs)
 	go watch(&cfg)
 
 	select {}

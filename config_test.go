@@ -91,6 +91,71 @@ func TestParseConfigDefault(t *testing.T) {
 	}
 }
 
+func TestParseConfigJobs(t *testing.T) {
+	yaml := `
+waybar:
+  layer: top
+jobs:
+  - name: sync
+    every: 5m
+    command: mbsync -a
+  - name: weather
+    schedule: "*/15 * * * *"
+    command: "curl wttr.in"
+    output: ~/.cache/waybar/weather
+`
+	cfg, err := parseConfig([]byte(yaml))
+	if err != nil {
+		t.Fatalf("parseConfig() error = %v", err)
+	}
+	if len(cfg.Jobs) != 2 {
+		t.Fatalf("expected 2 jobs, got %d", len(cfg.Jobs))
+	}
+
+	j0 := cfg.Jobs[0]
+	if j0.Name != "sync" {
+		t.Errorf("job[0].Name = %q, want %q", j0.Name, "sync")
+	}
+	if j0.Every != "5m" {
+		t.Errorf("job[0].Every = %q, want %q", j0.Every, "5m")
+	}
+	if j0.Command != "mbsync -a" {
+		t.Errorf("job[0].Command = %q, want %q", j0.Command, "mbsync -a")
+	}
+	if j0.Output != "" {
+		t.Errorf("job[0].Output = %q, want empty", j0.Output)
+	}
+
+	j1 := cfg.Jobs[1]
+	if j1.Name != "weather" {
+		t.Errorf("job[1].Name = %q, want %q", j1.Name, "weather")
+	}
+	if j1.Schedule != "*/15 * * * *" {
+		t.Errorf("job[1].Schedule = %q, want %q", j1.Schedule, "*/15 * * * *")
+	}
+	if j1.Output != "~/.cache/waybar/weather" {
+		t.Errorf("job[1].Output = %q, want %q", j1.Output, "~/.cache/waybar/weather")
+	}
+}
+
+func TestExpandHome(t *testing.T) {
+	home := os.Getenv("HOME")
+	tests := map[string]string{
+		"~/.config/foo": home + "/.config/foo",
+		"~/":            home + "/",
+		"~":             home,
+		"/abs/path":     "/abs/path",
+		"relative/path": "relative/path",
+		"":              "",
+	}
+	for input, want := range tests {
+		got := expandHome(input)
+		if got != want {
+			t.Errorf("expandHome(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestLoadConfigMissingFile(t *testing.T) {
 	origConfigPath := configPath
 	configPath = filepath.Join(t.TempDir(), "does-not-exist.yaml")

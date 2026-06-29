@@ -21,14 +21,25 @@ type MenuItem struct {
 	Children []MenuItem `yaml:"children"`
 }
 
+// Job defines a periodic command run by the jobs runner (GWS-0025).
+type Job struct {
+	Name     string `yaml:"name"`
+	Every    string `yaml:"every"`
+	Schedule string `yaml:"schedule"`
+	Command  string `yaml:"command"`
+	Output   string `yaml:"output"`
+}
+
 type Config struct {
 	Waybar map[string]any
 	Menus  map[string][]MenuItem
+	Jobs   []Job
 }
 
 type rawConfig struct {
 	Waybar  map[string]any   `yaml:"waybar"`
 	Sidecar *sidecarSettings `yaml:"sidecar"`
+	Jobs    []Job            `yaml:"jobs"`
 }
 
 // sidecarSettings holds runtime settings from the sidecar: section of config.yaml.
@@ -368,5 +379,17 @@ func parseConfig(b []byte) (Config, error) {
 	return Config{
 		Waybar: raw.Waybar,
 		Menus:  menus,
+		Jobs:   raw.Jobs,
 	}, nil
+}
+
+// expandHome replaces a leading ~ with the value of $HOME.
+func expandHome(path string) string {
+	if path == "~" {
+		return os.Getenv("HOME")
+	}
+	if strings.HasPrefix(path, "~/") {
+		return os.Getenv("HOME") + path[1:]
+	}
+	return path
 }

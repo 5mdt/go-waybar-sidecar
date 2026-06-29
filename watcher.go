@@ -70,6 +70,7 @@ func reload(cfg *Config) {
 		*cfg = newCfg
 	}
 	generate(*cfg)
+	jobs.restart(cfg.Jobs)
 }
 
 func addWatch(w *fsnotify.Watcher, p string) {

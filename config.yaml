@@ -5,6 +5,12 @@ sidecar:
   no-generate: false
   daemon: false
 
+# jobs:
+#   - name: example
+#     every: 5m              # or: schedule: "*/5 * * * *"
+#     command: "echo hello"
+#     output: ~/.cache/waybar/example  # optional stdout capture
+
 waybar:
   layer: top
   position: top

@@ -12,6 +12,11 @@ the sidecar's own session.
 
 `waybar.go` `reloadWaybar()`, fallback path after the SIGUSR2 reload attempt
 fails or finds no running instance:
+- Holds a package-level mutex for its entire body, so only one reload (reap +
+  SIGUSR2 + cold start + poll) runs at a time. Concurrent callers block and
+  then observe the already-restarted waybar instead of racing their own cold
+  start. Why: concurrent cold starts `pkill` each other's freshly-spawned
+  process and produce a spurious "waybar failed to start within 2s".
 - Logs "waybar not running, performing cold start".
 - Runs `pkill -x waybar` to clear out any stray/unresponsive process, then
   sleeps 200ms.
@@ -60,6 +65,9 @@ fails or finds no running instance:
   "failed to start waybar" and returns without panicking.
 - With a stub `waybar` that never reaches a running state: assert
   `reloadWaybar()` logs "waybar failed to start within 2s".
+- Two concurrent `reloadWaybar()` calls: assert they do not interleave, and
+  that no "waybar failed to start within 2s" is logged once waybar is
+  detectable (run with `-race`).
 
 ## Status
 

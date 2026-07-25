@@ -4,62 +4,49 @@
 
 ## Description
 
-Documents how the application behaves when config files or directories are
-symlinks, hardlinks, or bind mounts.
+How the app behaves when config files or directories are symlinks, hardlinks,
+or bind mounts.
 
 ## Implementation
 
-**Symlinks on top-level directories** (`~/.config/waybar`, `~/.config/go-waybar-sidecar`):
-Handled. `resolvedPath()` (`config.go`) calls `filepath.EvalSymlinks` on both
-the path and its parent at startup. All internal path variables (`waybarDir`,
-`gwsDir`, `menuDir`, `outJSON`) are set to the resolved real path, so watches
-and prefix comparisons are correct even if the directory itself is a symlink.
+Paths are resolved to their real location at startup via `resolvedPath()`
+(`config.go`), so watches use real paths even when a path is a symlink.
 
-**Symlinked files inside watched directories**: Handled. All filesystem
-operations use `os.Stat` (not `os.Lstat`), which follows symlinks. inotify
-events are emitted on the symlink name within the watched directory.
+- **Symlinked directories** (`~/.config/waybar`, `~/.config/go-waybar-sidecar`):
+  followed — watched by their resolved real path.
+- **Symlinked files** (e.g. `config.yaml`, `style.css`): followed. `watch()`
+  (`watcher.go`) also watches each symlink target's parent directory
+  (`symlinkTargets()`), because inotify on a directory only reports events for
+  its own entries, not a symlink target living elsewhere.
+- **Hardlinks / bind mounts**: behave as regular files; the kernel resolves
+  them. A bind mount must be present when the watcher starts.
+- **Symlinked subdirectories**: followed — watched recursively under their
+  logical (pre-symlink) path, via `collectWatchDirs()`; a cycle (a symlink
+  pointing back at an ancestor) is broken by tracking each directory's resolved
+  real path.
 
-**Hardlinks**: Handled. Hardlinks are indistinguishable from regular files at
-the OS level.
-
-**Bind mounts**: Handled. The kernel resolves them transparently; `fsnotify`
-watches the inode within the mount namespace. Works as long as the mount is
-present when the watcher starts.
-
-**Symlinked subdirectories inside watched directories**: Not followed.
-`filepath.Walk` (used in `addWatch()`) does not descend into symlinked
-subdirectories. This is not a practical limitation since `gtk3-menus/` and
-`go-waybar-sidecar/` are expected to be flat (no subdirectories).
-
-**Watched directory re-symlinked at runtime**: Not detected. If `waybarDir` or
-`gwsDir` itself is re-pointed to a different real directory after startup (e.g.
-`ln -sfn new-dir ~/.config/waybar`), the watcher continues watching the
-original resolved path. A restart is required to pick up the new target.
+Symlinks are resolved once at startup; re-pointing one at runtime needs a
+restart. Following a symlinked subdirectory watches its whole subtree, so a
+symlink into a very large tree adds an inotify watch per directory in it.
 
 ## Configuration
 
-No configuration. Behavior is determined by how the OS exposes the paths at
-startup.
+None.
 
 ## Testing
 
 ### Human Testing
 
-- Point `~/.config/waybar` to a real directory via symlink; start sidecar and
-  edit a file inside: confirm change is detected.
-- Point `~/.config/go-waybar-sidecar` to a real directory via symlink; start
-  sidecar and edit `config.yaml`: confirm reload fires.
-- Use a hardlink for `config.yaml`: confirm changes are detected and config
-  reloads.
+- Symlink `~/.config/waybar` or `~/.config/go-waybar-sidecar` to a real dir,
+  edit a file inside: change is detected.
+- Symlink `style.css`/`config.yaml` to a target in another dir, edit the
+  target: reload fires.
 
 ### Unit Testing
 
-N/A — behavior is a property of OS-level path resolution and `fsnotify`.
-
-### Integration Testing
-
-N/A — covered by human testing above.
+- `TestSymlinkTargets`, `TestAcceptEvent`, `TestCollectWatchDirs`
+  (`watcher_test.go`).
 
 ## Status
 
-Documented. No code changes required for the current flat directory structure.
+Implemented.

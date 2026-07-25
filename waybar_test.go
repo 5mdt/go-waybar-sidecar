@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -151,6 +153,83 @@ func TestWaybarPIDNoneRunning(t *testing.T) {
 	// waybarPID (the real impl) must return 0 gracefully when no waybar exists.
 	if pid := waybarPID(); pid != 0 {
 		t.Errorf("waybarPID() = %d, want 0 when waybar is not running", pid)
+	}
+}
+
+// --- concurrent reload serialization tests (see GWS-0007) ---
+//
+// Rationale: timer.Stop() in watcher.go cannot cancel a timer whose callback
+// has already fired, so two reload(cfg) goroutines can call reloadWaybar()
+// concurrently. Unguarded, they pkill/start waybar independently and can
+// clobber each other's freshly-spawned process, producing a spurious
+// "waybar failed to start within 2s" even though waybar ends up running.
+// reloadWaybar() must serialize itself against this.
+
+func TestReloadWaybarSerializesConcurrentCalls(t *testing.T) {
+	setupWaybarTest(t)
+	stubWaybarBinary(t)
+	waybarPIDsFn = func() []int { return nil }
+
+	// waybarPIDFn always reports "not running" so every invocation takes the
+	// full cold-start + poll path, holding the guarded section open long
+	// enough (coldStartPollAttempts x coldStartPollSleep, plus this stub's
+	// own delay) for a race to show up if calls aren't serialized.
+	var inFlight, maxSeen int32
+	waybarPIDFn = func() int {
+		n := atomic.AddInt32(&inFlight, 1)
+		for {
+			m := atomic.LoadInt32(&maxSeen)
+			if n <= m || atomic.CompareAndSwapInt32(&maxSeen, m, n) {
+				break
+			}
+		}
+		time.Sleep(3 * time.Millisecond)
+		atomic.AddInt32(&inFlight, -1)
+		return 0
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(3)
+	for i := 0; i < 3; i++ {
+		go func() {
+			defer wg.Done()
+			reloadWaybar()
+		}()
+	}
+	wg.Wait()
+
+	if got := atomic.LoadInt32(&maxSeen); got > 1 {
+		t.Errorf("reloadWaybar() calls overlapped: observed %d concurrent invocations in the guarded section, want 1", got)
+	}
+}
+
+func TestReloadWaybarConcurrentNoFalseFailure(t *testing.T) {
+	buf := setupWaybarTest(t)
+	stubWaybarBinary(t)
+	waybarPIDsFn = func() []int { return nil }
+
+	// Model waybar becoming detectable partway through startup and staying
+	// detectable (monotonic, like a real process): every check before the
+	// threshold reports "not running", every check after reports "running".
+	// This must hold under concurrent triggering: once waybar is up, no
+	// concurrently-triggered reload may still log a failure.
+	start := time.Now()
+	waybarPIDFn = func() int {
+		if time.Since(start) < 6*time.Millisecond {
+			return 0
+		}
+		return 42
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); reloadWaybar() }()
+	go func() { defer wg.Done(); reloadWaybar() }()
+	wg.Wait()
+
+	log := buf.String()
+	if strings.Contains(log, "waybar failed to start within 2s") {
+		t.Errorf("unexpected failure logged despite waybar being detectable:\n%s", log)
 	}
 }
 

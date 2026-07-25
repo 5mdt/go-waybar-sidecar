@@ -22,6 +22,19 @@ func watch(cfg *Config) {
 		addWatch(w, p)
 	}
 
+	targets := symlinkTargets(gwsDir, waybarDir)
+	parents := make(map[string]bool)
+	for target := range targets {
+		parents[filepath.Dir(target)] = true
+	}
+	for parent := range parents {
+		if err := w.Add(parent); err != nil {
+			logger.Warn("failed to watch symlink target dir", "path", parent, "err", err)
+		} else {
+			logger.Debug("watching symlink target dir", "path", parent)
+		}
+	}
+
 	var (
 		timer   *time.Timer
 		timerMu sync.Mutex
@@ -33,10 +46,7 @@ func watch(cfg *Config) {
 			if !isRelevantOp(e.Op) {
 				continue
 			}
-			if e.Name == outJSON || strings.HasPrefix(e.Name, menuDir+string(filepath.Separator)) {
-				continue
-			}
-			if !isWatchedFile(e.Name) {
+			if !acceptEvent(e.Name, targets) {
 				continue
 			}
 
@@ -89,21 +99,65 @@ func addWatch(w *fsnotify.Watcher, p string) {
 		return
 	}
 
-	filepath.Walk(p, func(path string, info os.FileInfo, err error) error {
-		if err != nil || !info.IsDir() {
-			return nil
-		}
-		if err := w.Add(path); err != nil {
-			logger.Warn("failed to watch dir", "path", path, "err", err)
+	for _, dir := range collectWatchDirs(p) {
+		if err := w.Add(dir); err != nil {
+			logger.Warn("failed to watch dir", "path", dir, "err", err)
 		} else {
-			logger.Debug("watching dir", "path", path)
+			logger.Debug("watching dir", "path", dir)
 		}
-		return nil
-	})
+	}
+}
+
+// collectWatchDirs recursively lists root and every subdirectory beneath it,
+// following directory symlinks (unlike filepath.Walk). Each entry is returned
+// under its logical (pre-symlink) path rooted at root, so callers that
+// classify events by string-prefix against root (see isWatchedFile) keep
+// working even when part of the path is a symlink. A symlink that resolves to
+// a directory already visited (e.g. pointing back at an ancestor) is skipped
+// to avoid infinite recursion.
+func collectWatchDirs(root string) []string {
+	visited := make(map[string]bool)
+	var dirs []string
+
+	var walk func(logical string)
+	walk = func(logical string) {
+		real, err := filepath.EvalSymlinks(logical)
+		if err != nil || visited[real] {
+			return
+		}
+		visited[real] = true
+		dirs = append(dirs, logical)
+
+		entries, err := os.ReadDir(real)
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			child := filepath.Join(logical, entry.Name())
+			if info, err := os.Stat(child); err == nil && info.IsDir() {
+				walk(child)
+			}
+		}
+	}
+	walk(root)
+
+	return dirs
 }
 
 func isRelevantOp(op fsnotify.Op) bool {
 	return op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0
+}
+
+// acceptEvent decides whether an inotify event name should trigger a reload.
+// targets is the set of resolved symlink target paths from symlinkTargets.
+func acceptEvent(name string, targets map[string]bool) bool {
+	if targets[name] {
+		return true
+	}
+	if name == outJSON || strings.HasPrefix(name, menuDir+string(filepath.Separator)) {
+		return false
+	}
+	return isWatchedFile(name)
 }
 
 func isWatchedFile(name string) bool {
@@ -112,4 +166,32 @@ func isWatchedFile(name string) bool {
 		return ext == ".yaml" || ext == ".yml"
 	}
 	return ext == ".json" || ext == ".jsonc" || ext == ".css"
+}
+
+// symlinkTargets scans the given directories (non-recursively) for whitelisted
+// files that are symlinks, and returns the set of their resolved real paths.
+// This lets watch() add a watch on each target's parent directory so that
+// edits to the symlink's target content (which may live outside the watched
+// directories) are detected.
+func symlinkTargets(dirs ...string) map[string]bool {
+	targets := make(map[string]bool)
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.Type()&os.ModeSymlink == 0 {
+				continue
+			}
+			path := filepath.Join(dir, entry.Name())
+			if !isWatchedFile(path) {
+				continue
+			}
+			if resolved, err := filepath.EvalSymlinks(path); err == nil {
+				targets[resolved] = true
+			}
+		}
+	}
+	return targets
 }

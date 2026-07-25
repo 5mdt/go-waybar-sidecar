@@ -27,7 +27,10 @@ edits.
   - Otherwise logs the change and (re)starts a 200ms debounce timer. When the
     timer fires, it calls `reload(cfg)`, which calls `loadConfig()` and
     `generate()` with the result stored back into `*cfg`; if `loadConfig()`
-    fails, the previous `*cfg` is kept (see GWS-0017).
+    fails, the previous `*cfg` is kept (see GWS-0017). Note: `timer.Stop()`
+    cannot cancel a timer whose callback has already fired, so two
+    `reload()` calls can overlap under rapid events; serialization is
+    guaranteed downstream in `reloadWaybar()` (see GWS-0007).
 - Watcher errors are logged at warn and do not stop the loop.
 
 ## Configuration

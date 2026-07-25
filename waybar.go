@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -54,7 +55,15 @@ func reapDuplicateWaybars() {
 	}
 }
 
+// reloadMu serializes reloadWaybar() so concurrent reloads (e.g. two debounce
+// timers firing back-to-back, see GWS-0005) can't pkill/start waybar
+// independently and clobber each other's freshly-spawned process.
+var reloadMu sync.Mutex
+
 func reloadWaybar() {
+	reloadMu.Lock()
+	defer reloadMu.Unlock()
+
 	reapDuplicateWaybars()
 	if pid := waybarPIDFn(); pid != 0 {
 		if err := syscall.Kill(pid, syscall.SIGUSR2); err == nil {

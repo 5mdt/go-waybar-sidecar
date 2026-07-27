@@ -197,11 +197,13 @@ func buildLogger(level slog.Level, output string, notifyLevel slog.Level, notify
 		return slog.New(textHandler), nil
 	}
 
-	if !notifyAvailable() {
+	n, ok := newNotifier(notifyAppName)
+	if !ok {
 		logger := slog.New(textHandler)
-		logger.Info("desktop notifications inactive", "reason", "notify-send not found")
+		logger.Info("desktop notifications inactive", "reason", "notification bus unavailable")
 		return logger, nil
 	}
+	sendNotification = n.send
 
 	notify := &notifyHandler{threshold: notifyLevel, appName: notifyAppName}
 	return slog.New(&multiHandler{handlers: []slog.Handler{textHandler, notify}}), nil

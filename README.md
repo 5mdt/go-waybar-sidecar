@@ -16,7 +16,7 @@ Generate configs for Waybar with menus, monitors waybar state. Suspiciously, cod
   ```
 - Generates configuration from YAML file. I really *hate* json files as human-writable configuration format :)
 - Generates gtk3-menu XML files from YAML with actions and submenus. This unifies Waybar configuration in one place.
-- Optional notifications with notify-send (mako, dunst, sway-nc, etc)
+- Optional clickable desktop notifications (mako, dunst, sway-nc, etc)
 - Config generation is optional, you can use app only as
 
 [Feature Requirements Document](./docs/FRD.md) is a source of features truth.

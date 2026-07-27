@@ -103,11 +103,11 @@ func buildXML(cfg Config) map[string]menuResult {
 		}
 
 		doc.Indent(2)
+		path := filepath.Join(menuDir, menuFileName(name))
 		if err := validateMenu(doc); err != nil {
-			logger.Error("invalid menu XML, skipping", "menu", name, "err", err)
+			logger.Error("invalid menu XML, skipping", "menu", name, "err", err, notifyOpen("Open menu", path))
 			continue
 		}
-		path := filepath.Join(menuDir, menuFileName(name))
 		if err := doc.WriteToFile(path); err != nil {
 			logger.Error("failed to write XML", "path", path, "err", err)
 			continue

@@ -77,14 +77,18 @@ func runJob(ctx context.Context, j Job, s schedule) {
 		}
 
 		out, err := jobExec(j.Command)
+		outPath := expandHome(j.Output)
 		if err != nil {
-			logger.Warn("job failed", "name", j.Name, "err", err)
+			if j.Output != "" {
+				logger.Warn("job failed", "name", j.Name, "err", err, notifyOpen("Show output", outPath))
+			} else {
+				logger.Warn("job failed", "name", j.Name, "err", err)
+			}
 		} else {
 			logger.Debug("job ran", "name", j.Name)
 		}
 
 		if j.Output != "" {
-			outPath := expandHome(j.Output)
 			if mkErr := os.MkdirAll(filepath.Dir(outPath), 0o755); mkErr != nil {
 				logger.Warn("job output: cannot create dir", "name", j.Name, "err", mkErr)
 			} else if wErr := os.WriteFile(outPath, []byte(strings.TrimRight(string(out), "\n")), 0o644); wErr != nil {

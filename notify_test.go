@@ -9,19 +9,19 @@ import (
 	"time"
 )
 
-func TestUrgencyForLevel(t *testing.T) {
+func TestUrgencyHint(t *testing.T) {
 	cases := []struct {
 		level slog.Level
-		want  string
+		want  byte
 	}{
-		{slog.LevelError, "critical"},
-		{slog.LevelWarn, "normal"},
-		{slog.LevelInfo, "low"},
-		{slog.LevelDebug, "low"},
+		{slog.LevelError, 2},
+		{slog.LevelWarn, 1},
+		{slog.LevelInfo, 0},
+		{slog.LevelDebug, 0},
 	}
 	for _, c := range cases {
-		if got := urgencyForLevel(c.level); got != c.want {
-			t.Errorf("urgencyForLevel(%v) = %q, want %q", c.level, got, c.want)
+		if got := urgencyHint(c.level); got != c.want {
+			t.Errorf("urgencyHint(%v) = %v, want %v", c.level, got, c.want)
 		}
 	}
 }
@@ -80,18 +80,27 @@ func TestNotifyHandlerEnabled(t *testing.T) {
 	}
 }
 
-func TestNotifyHandlerHandle(t *testing.T) {
-	origSend := sendNotification
-	defer func() { sendNotification = origSend }()
+type notifyCall struct {
+	urgency       byte
+	summary, body string
+	label, path   string
+}
 
-	type call struct {
-		app, urgency, summary, body string
-	}
-	var calls []call
-	sendNotification = func(app, urgency, summary, body string) error {
-		calls = append(calls, call{app, urgency, summary, body})
+func stubSendNotification(t *testing.T) *[]notifyCall {
+	t.Helper()
+	origSend := sendNotification
+	t.Cleanup(func() { sendNotification = origSend })
+
+	var calls []notifyCall
+	sendNotification = func(urgency byte, summary, body, label, path string) error {
+		calls = append(calls, notifyCall{urgency, summary, body, label, path})
 		return nil
 	}
+	return &calls
+}
+
+func TestNotifyHandlerHandle(t *testing.T) {
+	calls := stubSendNotification(t)
 
 	h := &notifyHandler{threshold: slog.LevelWarn, appName: "go-waybar-sidecar"}
 
@@ -99,8 +108,8 @@ func TestNotifyHandlerHandle(t *testing.T) {
 	if err := h.Handle(context.Background(), below); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(calls) != 0 {
-		t.Fatalf("expected no calls for below-threshold record, got %v", calls)
+	if len(*calls) != 0 {
+		t.Fatalf("expected no calls for below-threshold record, got %v", *calls)
 	}
 
 	rec := slog.NewRecord(time.Now(), slog.LevelError, "waybar failed to start", 0)
@@ -108,15 +117,12 @@ func TestNotifyHandlerHandle(t *testing.T) {
 	if err := h.Handle(context.Background(), rec); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(calls) != 1 {
-		t.Fatalf("expected 1 call, got %d", len(calls))
+	if len(*calls) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(*calls))
 	}
-	got := calls[0]
-	if got.app != "go-waybar-sidecar" {
-		t.Errorf("app = %q, want %q", got.app, "go-waybar-sidecar")
-	}
-	if got.urgency != "critical" {
-		t.Errorf("urgency = %q, want %q", got.urgency, "critical")
+	got := (*calls)[0]
+	if got.urgency != 2 {
+		t.Errorf("urgency = %v, want 2", got.urgency)
 	}
 	if got.summary != "waybar failed to start" {
 		t.Errorf("summary = %q, want %q", got.summary, "waybar failed to start")
@@ -126,12 +132,53 @@ func TestNotifyHandlerHandle(t *testing.T) {
 	}
 }
 
+func TestNotifyHandlerHandleDefaultAction(t *testing.T) {
+	calls := stubSendNotification(t)
+
+	h := &notifyHandler{threshold: slog.LevelError, appName: "go-waybar-sidecar"}
+	rec := slog.NewRecord(time.Now(), slog.LevelError, "boom", 0)
+	if err := h.Handle(context.Background(), rec); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := (*calls)[0]
+	if got.label != "Open config" {
+		t.Errorf("label = %q, want %q", got.label, "Open config")
+	}
+	if got.path != configPath {
+		t.Errorf("path = %q, want %q", got.path, configPath)
+	}
+}
+
+func TestNotifyHandlerHandleOverrideAction(t *testing.T) {
+	calls := stubSendNotification(t)
+
+	h := &notifyHandler{threshold: slog.LevelWarn, appName: "go-waybar-sidecar"}
+	rec := slog.NewRecord(time.Now(), slog.LevelWarn, "job failed", 0)
+	rec.AddAttrs(slog.String("name", "sync-mail"), notifyOpen("Show output", "/tmp/x"))
+
+	if err := h.Handle(context.Background(), rec); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := (*calls)[0]
+	if got.label != "Show output" || got.path != "/tmp/x" {
+		t.Errorf("label/path = %q/%q, want %q/%q", got.label, got.path, "Show output", "/tmp/x")
+	}
+	if strings.Contains(got.body, notifyActionKey) {
+		t.Errorf("body = %q, should not contain %q", got.body, notifyActionKey)
+	}
+	if !strings.Contains(got.body, "name=sync-mail") {
+		t.Errorf("body = %q, want it to contain %q", got.body, "name=sync-mail")
+	}
+}
+
 func TestNotifyHandlerHandleSwallowsErrors(t *testing.T) {
 	origSend := sendNotification
 	defer func() { sendNotification = origSend }()
 
-	sendNotification = func(app, urgency, summary, body string) error {
-		return errors.New("notify-send: command not found")
+	sendNotification = func(urgency byte, summary, body, label, path string) error {
+		return errors.New("notification bus unavailable")
 	}
 
 	h := &notifyHandler{threshold: slog.LevelError, appName: "go-waybar-sidecar"}
@@ -142,17 +189,43 @@ func TestNotifyHandlerHandleSwallowsErrors(t *testing.T) {
 	}
 }
 
-func TestNotifyAvailable(t *testing.T) {
-	origLook := lookNotifySend
-	defer func() { lookNotifySend = origLook }()
+func TestOpenActionLogValue(t *testing.T) {
+	a := openAction{label: "Show output", path: "/tmp/x"}
+	if got := a.LogValue().String(); got != "/tmp/x" {
+		t.Errorf("LogValue() = %q, want %q", got, "/tmp/x")
+	}
+}
 
-	lookNotifySend = func() bool { return false }
-	if notifyAvailable() {
-		t.Error("expected notifyAvailable=false when notify-send is missing")
+func TestNotifierHandleSignal(t *testing.T) {
+	origOpen := openTarget
+	defer func() { openTarget = origOpen }()
+
+	var opened []string
+	openTarget = func(path string) error {
+		opened = append(opened, path)
+		return nil
 	}
 
-	lookNotifySend = func() bool { return true }
-	if !notifyAvailable() {
-		t.Error("expected notifyAvailable=true when notify-send is present")
+	n := &notifier{pending: map[uint32]string{7: "/tmp/known"}}
+
+	// Unknown ID: no action taken.
+	n.handleSignal(notifyBusName+".ActionInvoked", []interface{}{uint32(99), "default"})
+	if len(opened) != 0 {
+		t.Fatalf("expected no calls for unknown notification id, got %v", opened)
+	}
+
+	// Known ID: openTarget called with the recorded path.
+	n.handleSignal(notifyBusName+".ActionInvoked", []interface{}{uint32(7), "default"})
+	if len(opened) != 1 || opened[0] != "/tmp/known" {
+		t.Fatalf("expected openTarget(\"/tmp/known\"), got %v", opened)
+	}
+
+	// NotificationClosed removes the id from pending.
+	n.handleSignal(notifyBusName+".NotificationClosed", []interface{}{uint32(7), uint32(1)})
+	n.mu.Lock()
+	_, stillPending := n.pending[7]
+	n.mu.Unlock()
+	if stillPending {
+		t.Error("expected id 7 to be removed from pending after NotificationClosed")
 	}
 }

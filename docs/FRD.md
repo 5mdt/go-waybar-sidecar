@@ -14,7 +14,7 @@
 - [GWS-0010. Daemon mode](features/GWS-0010-daemon-mode.md) - `#process-lifecycle` `#cli`
 - [GWS-0011. Configurable logging](features/GWS-0011-configurable-logging.md) - `#logging` `#cli`
 - [GWS-0012. Graceful shutdown on signals](features/GWS-0012-graceful-shutdown-on-signals.md) - `#process-lifecycle`
-- [GWS-0013. Desktop notifications via notify-send](features/GWS-0013-desktop-notifications-via-notify-send.md) - `#logging`
+- [GWS-0013. Desktop notifications via D-Bus](features/GWS-0013-desktop-notifications.md) - `#logging`
 - [GWS-0014. Configurable config path](features/GWS-0014-configurable-config-path.md) - `#config` `#cli`
 - [GWS-0015. Multiple menu support across waybar modules](features/GWS-0015-multiple-menu-support.md) - `#config-generation` `#menu`
 - [GWS-0016. Watch-only mode (--no-generate)](features/GWS-0016-watch-only-no-generate-mode.md) - `#config-generation` `#reload` `#cli`
@@ -27,6 +27,7 @@
 - [GWS-0023. Menu separator items and duplicate element IDs](features/GWS-0023-menu-separator-duplicate-ids.md) - `#menu` `#config-generation`
 - [GWS-0024. Menu XML duplicate ID validation](features/GWS-0024-menu-xml-validation.md) - `#menu` `#config-generation`
 - [GWS-0025. Cron-like jobs runner](features/GWS-0025-cronlike-jobs-runner.md) - `#config` `#jobs`
+- [GWS-0026. Notification click actions](features/GWS-0026-notification-click-actions.md) - `#logging`
 
 ## Tags
 
@@ -35,7 +36,7 @@
 - `#menu`: GWS-0002, GWS-0003, GWS-0015, GWS-0023, GWS-0024
 - `#reload`: GWS-0005, GWS-0006, GWS-0007, GWS-0016, GWS-0017, GWS-0022
 - `#process-lifecycle`: GWS-0006, GWS-0007, GWS-0008, GWS-0009, GWS-0010, GWS-0012, GWS-0017, GWS-0022
-- `#logging`: GWS-0011, GWS-0013
+- `#logging`: GWS-0011, GWS-0013, GWS-0026
 - `#cli`: GWS-0010, GWS-0011, GWS-0014, GWS-0016, GWS-0019
 - `#filesystem`: GWS-0021
 - `#jobs`: GWS-0025

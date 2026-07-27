@@ -12,16 +12,15 @@ avoiding a full restart when possible.
 ## Implementation
 
 `waybar.go` `reloadWaybar()`, called at the end of `generate()`:
-- `waybarPID()` finds the running Waybar process via `pgrep -x waybar`,
-  taking the first PID from the output and validating it with
-  `isRealWaybar()` (not a zombie, and `/proc/<pid>/exe` ends in `/waybar`).
-- If a valid PID is found, sends `SIGUSR2` to it. On success:
+- `waybar.alive()` reports whether the sidecar's supervised child (GWS-0027)
+  is currently running - an in-memory channel check, not a process lookup.
+- If alive, sends `SIGUSR2` to `waybar.pid()`. On success:
   - Logs "waybar reloaded via USR2".
-  - Waits 500ms, then re-checks `waybarPID()`. If Waybar is still running,
-    returns - reload succeeded.
-  - If Waybar is no longer running, logs a warning and falls through to cold
-    start (GWS-0007).
-- If no valid PID is found, or `SIGUSR2` fails, falls through to cold start.
+  - Waits `usr2SettleDelay` (500ms), then re-checks `waybar.alive()`. If still
+    alive, returns - reload succeeded.
+  - If no longer alive, logs a warning and falls through to cold start
+    (GWS-0007).
+- If not alive, or `SIGUSR2` fails, falls through to cold start.
 
 ## Configuration
 
@@ -38,11 +37,9 @@ None.
 
 ### Unit Testing
 
-- `isRealWaybar()` with a PID whose `/proc/<pid>/exe` does not end in
-  `/waybar`: assert `false`.
-- `isRealWaybar()` with a PID in zombie state (`State: Z` in
-  `/proc/<pid>/status`): assert `false`.
-- `waybarPID()` when `pgrep -x waybar` returns no output: assert `0`.
+See GWS-0027 for `waybarProc` unit tests (`alive`, `pid`, `stop`, `start`).
+`reloadWaybar()` with a live child takes the SIGUSR2 path and spawns no new
+process.
 
 ### Integration Testing
 

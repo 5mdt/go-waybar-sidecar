@@ -134,6 +134,7 @@ func run() {
 				logger.Debug("SIGHUP received (ignored)")
 			case syscall.SIGINT, syscall.SIGTERM:
 				logger.Info("shutting down", "signal", sig)
+				waybar.stop()
 				os.Exit(0)
 			}
 		}
@@ -147,7 +148,7 @@ func run() {
 
 	ensureSingleInstance()
 	savePID("waybar-sidecar", os.Getpid())
-	reapDuplicateWaybars()
+	sweepStrayWaybars()
 
 	var cfg Config
 	if !noGenerate {

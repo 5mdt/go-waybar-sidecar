@@ -23,19 +23,20 @@
 - [GWS-0019. Config-file and environment-variable settings](features/GWS-0019-config-file-and-env-vars.md) - `#config` `#cli`
 - [GWS-0020. Persist default sidecar settings to config file](features/GWS-0020-persist-default-settings.md) - `#config`
 - [GWS-0021. Symlink, hardlink, and mount handling](features/GWS-0021-symlink-hardlink-mount-handling.md) - `#config` `#filesystem`
-- [GWS-0022. Reap duplicate waybar instances](features/GWS-0022-reap-duplicate-waybar-instances.md) - `#process-lifecycle` `#reload`
+- [GWS-0022. Sweep stray waybar instances at startup](features/GWS-0022-sweep-stray-waybars-at-startup.md) - `#process-lifecycle` `#reload`
 - [GWS-0023. Menu separator items and duplicate element IDs](features/GWS-0023-menu-separator-duplicate-ids.md) - `#menu` `#config-generation`
 - [GWS-0024. Menu XML duplicate ID validation](features/GWS-0024-menu-xml-validation.md) - `#menu` `#config-generation`
 - [GWS-0025. Cron-like jobs runner](features/GWS-0025-cronlike-jobs-runner.md) - `#config` `#jobs`
 - [GWS-0026. Notification click actions](features/GWS-0026-notification-click-actions.md) - `#logging`
+- [GWS-0027. Waybar process supervision](features/GWS-0027-waybar-process-supervision.md) - `#process-lifecycle` `#reload`
 
 ## Tags
 
 - `#config`: GWS-0004, GWS-0005, GWS-0014, GWS-0017, GWS-0018, GWS-0019, GWS-0020, GWS-0021, GWS-0025
 - `#config-generation`: GWS-0001, GWS-0002, GWS-0004, GWS-0015, GWS-0016, GWS-0018, GWS-0023, GWS-0024
 - `#menu`: GWS-0002, GWS-0003, GWS-0015, GWS-0023, GWS-0024
-- `#reload`: GWS-0005, GWS-0006, GWS-0007, GWS-0016, GWS-0017, GWS-0022
-- `#process-lifecycle`: GWS-0006, GWS-0007, GWS-0008, GWS-0009, GWS-0010, GWS-0012, GWS-0017, GWS-0022
+- `#reload`: GWS-0005, GWS-0006, GWS-0007, GWS-0016, GWS-0017, GWS-0022, GWS-0027
+- `#process-lifecycle`: GWS-0006, GWS-0007, GWS-0008, GWS-0009, GWS-0010, GWS-0012, GWS-0017, GWS-0022, GWS-0027
 - `#logging`: GWS-0011, GWS-0013, GWS-0026
 - `#cli`: GWS-0010, GWS-0011, GWS-0014, GWS-0016, GWS-0019
 - `#filesystem`: GWS-0021

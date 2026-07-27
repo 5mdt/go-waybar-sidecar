@@ -11,65 +11,193 @@ import (
 	"time"
 )
 
-// coldStartPollAttempts and the sleep durations are vars so tests can shorten them.
+// Timing vars so tests can shrink them.
 var (
-	coldStartPollAttempts = 4
-	coldStartPollSleep    = 500 * time.Millisecond
-	coldStartKillSleep    = 200 * time.Millisecond
+	usr2SettleDelay      = 500 * time.Millisecond
+	coldStartSettleDelay = 500 * time.Millisecond
+	stopGraceDelay       = 2 * time.Second
 )
 
-// waybarPIDFn is an indirection over waybarPID so tests can stub it.
-var waybarPIDFn = waybarPID
-
-// Indirections for reapDuplicateWaybars so tests can stub them.
+// Auto-restart rate limit: give up after autoRestartMax restarts within
+// autoRestartWindow, rather than hot-looping against a persistently crashing
+// waybar. Vars so tests can shrink them.
 var (
-	waybarPIDsFn    = waybarPIDs
-	procStartTimeFn = procStartTime
-	killFn          = syscall.Kill
+	autoRestartMax    = 5
+	autoRestartWindow = time.Minute
 )
 
-func reapDuplicateWaybars() {
-	pids := waybarPIDsFn()
-	if len(pids) <= 1 {
-		return
+// killFn and waybarPIDsFn are indirections so tests can stub them.
+var (
+	killFn       = syscall.Kill
+	waybarPIDsFn = waybarPIDs
+)
+
+// reloadMu serializes reloadWaybar() and auto-restarts so concurrent
+// triggers (e.g. two debounce timers firing back-to-back, see GWS-0005; or a
+// crash racing a config edit) can't stop/start waybar independently and
+// clobber each other's freshly-spawned process.
+var reloadMu sync.Mutex
+
+// waybarProc is the sidecar's handle on the waybar process it started (see
+// GWS-0027). Liveness is an in-memory channel check, not a pgrep guess: there
+// is no window where a dead child is misreported as running, or vice versa.
+// The child is always Wait()-ed so it never becomes a zombie.
+type waybarProc struct {
+	mu         sync.Mutex
+	cmd        *exec.Cmd
+	done       chan struct{}
+	generation int
+	expectExit bool
+}
+
+// start launches a fresh waybar, detached into its own session so it
+// survives the sidecar's own signals/restart. A background goroutine reaps
+// it via Wait() and, if it exits without stop() having been called first,
+// schedules an auto-restart.
+func (p *waybarProc) start() error {
+	p.mu.Lock()
+	cmd := exec.Command("waybar")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		p.mu.Unlock()
+		return err
 	}
-	var newest int
-	var newestTime uint64
-	for _, pid := range pids {
-		st, err := procStartTimeFn(pid)
-		if err != nil {
-			continue
-		}
-		if st > newestTime {
-			newestTime = st
-			newest = pid
-		}
+
+	p.generation++
+	gen := p.generation
+	done := make(chan struct{})
+	p.cmd = cmd
+	p.done = done
+	p.expectExit = false
+	p.mu.Unlock()
+
+	go func() {
+		_ = cmd.Wait()
+		close(done)
+		p.onExit(gen)
+	}()
+	return nil
+}
+
+// alive reports whether the currently tracked process is still running.
+func (p *waybarProc) alive() bool {
+	p.mu.Lock()
+	started := p.cmd != nil
+	done := p.done
+	p.mu.Unlock()
+	if !started {
+		return false
 	}
-	for _, pid := range pids {
-		if pid == newest {
-			continue
-		}
-		if err := killFn(pid, syscall.SIGTERM); err == nil {
-			logger.Info("killed older waybar instance", "pid", pid, "kept", newest)
-		}
+	select {
+	case <-done:
+		return false
+	default:
+		return true
 	}
 }
 
-// reloadMu serializes reloadWaybar() so concurrent reloads (e.g. two debounce
-// timers firing back-to-back, see GWS-0005) can't pkill/start waybar
-// independently and clobber each other's freshly-spawned process.
-var reloadMu sync.Mutex
+// pid returns the current child's PID, or 0 if none is tracked.
+func (p *waybarProc) pid() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.cmd == nil || p.cmd.Process == nil {
+		return 0
+	}
+	return p.cmd.Process.Pid
+}
 
+// stop terminates the tracked process (its whole process group, since Setsid
+// makes pid == pgid) and waits for it to exit, escalating to SIGKILL if it
+// doesn't within stopGraceDelay. Idempotent: a no-op if nothing is tracked.
+func (p *waybarProc) stop() {
+	p.mu.Lock()
+	pid := 0
+	done := p.done
+	if p.cmd != nil && p.cmd.Process != nil {
+		pid = p.cmd.Process.Pid
+	}
+	p.expectExit = true
+	p.mu.Unlock()
+
+	if pid == 0 {
+		return
+	}
+
+	_ = killFn(-pid, syscall.SIGTERM)
+	select {
+	case <-done:
+	case <-time.After(stopGraceDelay):
+		_ = killFn(-pid, syscall.SIGKILL)
+		<-done
+	}
+}
+
+// onExit runs in the Wait() goroutine after a process exits. If a newer
+// start() has since occurred, or stop() marked this exit as expected, the
+// caller that triggered it is already handling what comes next and onExit
+// does nothing. Otherwise the process died on its own and a restart is
+// scheduled, rate-limited.
+func (p *waybarProc) onExit(generation int) {
+	p.mu.Lock()
+	current := p.generation == generation
+	expected := p.expectExit
+	p.mu.Unlock()
+
+	if !current || expected {
+		return
+	}
+	p.scheduleAutoRestart()
+}
+
+var (
+	autoRestartMu    sync.Mutex
+	autoRestartTimes []time.Time
+)
+
+// scheduleAutoRestart restarts a waybar that exited unexpectedly, unless it
+// has crashed more than autoRestartMax times within autoRestartWindow.
+func (p *waybarProc) scheduleAutoRestart() {
+	autoRestartMu.Lock()
+	now := time.Now()
+	cutoff := now.Add(-autoRestartWindow)
+	kept := autoRestartTimes[:0]
+	for _, t := range autoRestartTimes {
+		if t.After(cutoff) {
+			kept = append(kept, t)
+		}
+	}
+	kept = append(kept, now)
+	autoRestartTimes = kept
+	tooMany := len(autoRestartTimes) > autoRestartMax
+	autoRestartMu.Unlock()
+
+	if tooMany {
+		logger.Error("waybar crashed repeatedly, giving up on auto-restart", "restarts", len(autoRestartTimes))
+		return
+	}
+
+	logger.Warn("waybar exited unexpectedly, restarting")
+	reloadMu.Lock()
+	defer reloadMu.Unlock()
+	if err := p.start(); err != nil {
+		logger.Error("failed to restart waybar after crash", "err", err)
+	}
+}
+
+// waybar is the sidecar's single supervised waybar instance.
+var waybar waybarProc
+
+// reloadWaybar asks waybar to reload in place via SIGUSR2 if it's running,
+// falling back to a full stop+start if that fails or waybar isn't running.
 func reloadWaybar() {
 	reloadMu.Lock()
 	defer reloadMu.Unlock()
 
-	reapDuplicateWaybars()
-	if pid := waybarPIDFn(); pid != 0 {
-		if err := syscall.Kill(pid, syscall.SIGUSR2); err == nil {
-			logger.Info("waybar reloaded via USR2", "pid", pid)
-			time.Sleep(500 * time.Millisecond)
-			if waybarPIDFn() != 0 {
+	if waybar.alive() {
+		if err := syscall.Kill(waybar.pid(), syscall.SIGUSR2); err == nil {
+			logger.Info("waybar reloaded via USR2", "pid", waybar.pid())
+			time.Sleep(usr2SettleDelay)
+			if waybar.alive() {
 				return
 			}
 			logger.Warn("waybar died after reload, falling back to cold start")
@@ -77,43 +205,29 @@ func reloadWaybar() {
 	}
 
 	logger.Warn("waybar not running, performing cold start")
-	exec.Command("pkill", "-x", "waybar").Run()
-	time.Sleep(coldStartKillSleep)
+	waybar.stop()
 
-	cmd := exec.Command("waybar")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := cmd.Start(); err != nil {
+	if err := waybar.start(); err != nil {
 		logger.Error("failed to start waybar", "err", err)
 		return
 	}
 
-	for i := 0; i < coldStartPollAttempts; i++ {
-		time.Sleep(coldStartPollSleep)
-		if alive := waybarPIDFn(); alive != 0 {
-			logger.Info("waybar started", "pid", alive)
-			return
-		}
-	}
-	// Final check: waybar may have started under a different PID than we
-	// launched, or pgrep was briefly slow during the poll window.
-	if alive := waybarPIDFn(); alive != 0 {
-		logger.Info("waybar started", "pid", alive)
+	time.Sleep(coldStartSettleDelay)
+	if waybar.alive() {
+		logger.Info("waybar started", "pid", waybar.pid())
 		return
 	}
-	logger.Error("waybar failed to start within 2s")
+	logger.Error("waybar failed to start")
 }
 
-func waybarPID() int {
-	out, err := exec.Command("pgrep", "-x", "waybar").Output()
-	if err != nil {
-		return 0
+// sweepStrayWaybars terminates every waybar process found at startup: the
+// sidecar owns none yet, so all of them are strays from a previous session.
+func sweepStrayWaybars() {
+	for _, pid := range waybarPIDsFn() {
+		if err := killFn(pid, syscall.SIGTERM); err == nil {
+			logger.Info("killed stray waybar instance", "pid", pid)
+		}
 	}
-	line := strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
-	pid, _ := strconv.Atoi(line)
-	if pid == 0 || !isRealWaybar(pid) {
-		return 0
-	}
-	return pid
 }
 
 func isRealWaybar(pid int) bool {
@@ -153,33 +267,4 @@ func waybarPIDs() []int {
 		}
 	}
 	return pids
-}
-
-// procStartTime returns the kernel start time (field 22 of /proc/<pid>/stat)
-// as a raw clock-tick counter. Higher means more recently started.
-func procStartTime(pid int) (uint64, error) {
-	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
-	if err != nil {
-		return 0, err
-	}
-	// The comm field (2nd token) may contain spaces and parentheses.
-	// Skip past the last ')' to find the remaining fields reliably.
-	s := string(data)
-	idx := strings.LastIndex(s, ")")
-	if idx < 0 {
-		return 0, fmt.Errorf("malformed /proc/%d/stat", pid)
-	}
-	fields := strings.Fields(s[idx+1:])
-	// After ')': state(0) ppid(1) pgrp(2) session(3) tty(4) tpgid(5)
-	// flags(6) minflt(7) cminflt(8) majflt(9) cmajflt(10) utime(11)
-	// stime(12) cutime(13) cstime(14) priority(15) nice(16) threads(17)
-	// itrealvalue(18) starttime(19)
-	if len(fields) < 20 {
-		return 0, fmt.Errorf("short /proc/%d/stat", pid)
-	}
-	st, err := strconv.ParseUint(fields[19], 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("parse starttime for pid %d: %w", pid, err)
-	}
-	return st, nil
 }

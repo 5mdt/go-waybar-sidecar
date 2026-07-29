@@ -18,7 +18,8 @@ func watch(cfg *Config) {
 	}
 	defer w.Close()
 
-	for _, p := range []string{gwsDir, waybarDir} {
+	watchPaths := append([]string{gwsDir, waybarDir}, appDirs()...)
+	for _, p := range watchPaths {
 		addWatch(w, p)
 	}
 
@@ -164,6 +165,11 @@ func isWatchedFile(name string) bool {
 	ext := strings.ToLower(filepath.Ext(name))
 	if strings.HasPrefix(name, gwsDir+string(filepath.Separator)) {
 		return ext == ".yaml" || ext == ".yml"
+	}
+	for _, dir := range appDirs() {
+		if strings.HasPrefix(name, dir+string(filepath.Separator)) {
+			return ext == ".desktop"
+		}
 	}
 	return ext == ".json" || ext == ".jsonc" || ext == ".css"
 }

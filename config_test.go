@@ -156,6 +156,102 @@ func TestExpandHome(t *testing.T) {
 	}
 }
 
+func stubScanApplications(t *testing.T, items []MenuItem) {
+	t.Helper()
+	orig := scanApplications
+	scanApplications = func() []MenuItem { return items }
+	t.Cleanup(func() { scanApplications = orig })
+}
+
+func TestExpandIncludes_Applications(t *testing.T) {
+	stubScanApplications(t, []MenuItem{
+		{Name: "Alpha", Action: "alpha"},
+		{Name: "Beta", Action: "beta"},
+	})
+
+	items := []MenuItem{
+		{Name: "Terminal", Action: "foot"},
+		{Include: "applications:plain"},
+		{Name: "Browser", Action: "firefox"},
+	}
+	got := expandIncludes(items)
+
+	want := []string{"Terminal", "Alpha", "Beta", "Browser"}
+	if len(got) != len(want) {
+		t.Fatalf("expandIncludes() = %d items, want %d: %+v", len(got), len(want), got)
+	}
+	for i, name := range want {
+		if got[i].Name != name {
+			t.Errorf("got[%d].Name = %q, want %q", i, got[i].Name, name)
+		}
+	}
+}
+
+func TestExpandIncludes_TopLevel(t *testing.T) {
+	stubScanApplications(t, []MenuItem{{Name: "Alpha", Action: "alpha"}})
+
+	got := expandIncludes([]MenuItem{{Include: "applications:plain"}})
+	if len(got) != 1 || got[0].Name != "Alpha" {
+		t.Fatalf("expandIncludes() = %+v, want [Alpha]", got)
+	}
+}
+
+func TestExpandIncludes_Nested(t *testing.T) {
+	stubScanApplications(t, []MenuItem{{Name: "Alpha", Action: "alpha"}})
+
+	items := []MenuItem{
+		{
+			Name: "Apps",
+			Children: []MenuItem{
+				{Include: "applications:plain"},
+			},
+		},
+	}
+	got := expandIncludes(items)
+
+	if len(got) != 1 || got[0].Name != "Apps" {
+		t.Fatalf("expandIncludes() = %+v, want single Apps submenu", got)
+	}
+	children := got[0].Children
+	if len(children) != 1 || children[0].Name != "Alpha" {
+		t.Fatalf("expandIncludes() children = %+v, want [Alpha]", children)
+	}
+}
+
+func TestExpandIncludes_UnknownAlias(t *testing.T) {
+	items := []MenuItem{
+		{Name: "Terminal", Action: "foot"},
+		{Include: "applications:bogus"},
+		{Name: "Browser", Action: "firefox"},
+	}
+	got := expandIncludes(items)
+
+	want := []string{"Terminal", "Browser"}
+	if len(got) != len(want) {
+		t.Fatalf("expandIncludes() = %+v, want %v (unknown alias dropped)", got, want)
+	}
+	for i, name := range want {
+		if got[i].Name != name {
+			t.Errorf("got[%d].Name = %q, want %q", i, got[i].Name, name)
+		}
+	}
+}
+
+func TestExpandIncludes_NoIncludes(t *testing.T) {
+	items := []MenuItem{
+		{Name: "Terminal", Action: "foot"},
+		{Name: "Apps", Children: []MenuItem{{Name: "Browser", Action: "firefox"}}},
+	}
+	got := expandIncludes(items)
+
+	if len(got) != 2 || got[0].Name != "Terminal" || got[1].Name != "Apps" {
+		t.Fatalf("expandIncludes() = %+v, want unchanged passthrough", got)
+	}
+	if len(got[1].Children) != 1 || got[1].Children[0].Name != "Browser" {
+		t.Fatalf("expandIncludes() children = %+v, want unchanged", got[1].Children)
+	}
+}
+
 func TestLoadConfigMissingFile(t *testing.T) {
 	origConfigPath := configPath
 	configPath = filepath.Join(t.TempDir(), "does-not-exist.yaml")

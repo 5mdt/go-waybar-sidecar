@@ -19,6 +19,9 @@ type MenuItem struct {
 	Name     string     `yaml:"name"`
 	Action   string     `yaml:"action"`
 	Children []MenuItem `yaml:"children"`
+	// Include, when set, replaces this item in place with a generated list of
+	// items (see expandIncludes). Name/Action/Children are ignored.
+	Include string `yaml:"include"`
 }
 
 // Job defines a periodic command run by the jobs runner (GWS-0025).
@@ -339,6 +342,10 @@ func loadConfig() (Config, error) {
 		return Config{}, err
 	}
 
+	for name, items := range cfg.Menus {
+		cfg.Menus[name] = expandIncludes(items)
+	}
+
 	logger.Debug("config loaded",
 		"waybar_keys", len(cfg.Waybar),
 		"menus", len(cfg.Menus),
@@ -381,6 +388,39 @@ func parseConfig(b []byte) (Config, error) {
 		Menus:  menus,
 		Jobs:   raw.Jobs,
 	}, nil
+}
+
+// expandIncludes recursively replaces each item with a non-empty Include by
+// the resolved alias's items, splicing them in place of the item (not
+// wrapped in a submenu). Unknown aliases are dropped with a warning. See
+// GWS-0028.
+func expandIncludes(items []MenuItem) []MenuItem {
+	expanded := make([]MenuItem, 0, len(items))
+	for _, item := range items {
+		if item.Include != "" {
+			resolved, ok := resolveInclude(item.Include)
+			if !ok {
+				logger.Warn("unknown include alias, dropping item", "include", item.Include)
+				continue
+			}
+			expanded = append(expanded, resolved...)
+			continue
+		}
+
+		item.Children = expandIncludes(item.Children)
+		expanded = append(expanded, item)
+	}
+	return expanded
+}
+
+// resolveInclude resolves a single include alias to its generated items.
+func resolveInclude(alias string) ([]MenuItem, bool) {
+	switch alias {
+	case "applications:plain":
+		return scanApplications(), true
+	default:
+		return nil, false
+	}
 }
 
 // expandHome replaces a leading ~ with the value of $HOME.

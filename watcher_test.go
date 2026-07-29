@@ -44,6 +44,30 @@ func TestIsWatchedFile(t *testing.T) {
 	}
 }
 
+func TestIsWatchedFile_AppDir(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dataHome)
+	t.Setenv("XDG_DATA_DIRS", "")
+
+	appDir := filepath.Join(dataHome, "applications")
+
+	origGwsDir := gwsDir
+	gwsDir = t.TempDir()
+	defer func() { gwsDir = origGwsDir }()
+
+	cases := map[string]bool{
+		filepath.Join(appDir, "foo.desktop"):        true,
+		filepath.Join(appDir, "sub", "foo.desktop"): true,
+		filepath.Join(appDir, "foo.json"):           false,
+		filepath.Join(gwsDir, "foo.desktop"):        false,
+	}
+	for name, want := range cases {
+		if got := isWatchedFile(name); got != want {
+			t.Errorf("isWatchedFile(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
 func TestSymlinkTargets(t *testing.T) {
 	dir := t.TempDir()
 	origWaybarDir, origGwsDir := waybarDir, gwsDir

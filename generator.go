@@ -210,11 +210,7 @@ func addNode(parent *etree.Element, item MenuItem, actions map[string]string, id
 	obj.CreateAttr("class", "GtkMenuItem")
 	obj.CreateAttr("id", id)
 
-	label := item.Name
-	if len(item.Children) > 0 {
-		label += " ▶"
-	}
-	setMenuItemLabel(obj, id, label, item.Bold)
+	setMenuItemLabel(obj, id, item.Name, item.Bold)
 
 	if len(item.Children) == 0 {
 		actions[id] = item.Action

@@ -15,7 +15,7 @@ nested `GtkMenu` submenu instead of a clickable action.
   and `actions[item.Name] = item.Action` is recorded for `menu-actions`
   (GWS-0001).
 - If `item.Children` is non-empty, the item is a submenu:
-  - Its label is `item.Name + " ▶"`.
+  - Its label is `item.Name`, unchanged from a leaf item.
   - A `<child type="submenu">` containing a new `GtkMenu` object is created.
   - `addNode()` is called recursively for each entry in `item.Children`,
     appending into the new submenu. Submenu items are not added to
@@ -36,14 +36,14 @@ nested `GtkMenu` submenu instead of a clickable action.
 
 - Add a `children` list to a `menu_definition` entry (e.g. the default
   `Apps`/`Power` groups in `config.yaml`), regenerate, and confirm the Start
-  menu shows a `▶` submenu that opens to reveal the children.
+  menu shows a submenu that opens to reveal the children.
 - Nest a submenu inside a submenu and confirm both levels render correctly.
 
 ### Unit Testing
 
 - `addNode()` with an item that has `children`: assert the produced
-  `GtkMenuItem` label ends with `" ▶"`, contains a `child[type=submenu]` >
-  `GtkMenu`, and that the item itself is not added to `actions`.
+  `GtkMenuItem` contains a `child[type=submenu]` > `GtkMenu`, and that the
+  item itself is not added to `actions`.
 - `addNode()` with a leaf item: assert no submenu element is created and
   `actions[item.Name] == item.Action`.
 - `addNode()` with two levels of nesting: assert both levels produce nested

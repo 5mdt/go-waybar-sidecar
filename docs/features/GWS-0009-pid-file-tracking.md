@@ -4,8 +4,10 @@
 
 ## Description
 
-The sidecar records its own PID in a shared state directory so
-GWS-0008's takeover logic has a PID to check.
+The sidecar records its own PID in a shared state directory. The pidfile is
+informational (external tooling, human inspection) — since GWS-0008's rework
+it is no longer read by the takeover logic itself, which discovers other
+instances directly via `/proc`.
 
 ## Implementation
 
@@ -25,7 +27,8 @@ The Waybar process PID is not stored — `waybarPID()` discovers it fresh via
 ## Configuration
 
 - `pidDir` = `~/.local/state/waybar`.
-- Files: `waybar-sidecar.pid`.
+- Files: `waybar-sidecar.pid` (informational), `waybar-sidecar.lock` (the
+  takeover lock, see GWS-0008).
 
 ## Testing
 

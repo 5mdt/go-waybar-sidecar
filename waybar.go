@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -231,23 +229,7 @@ func sweepStrayWaybars() {
 }
 
 func isRealWaybar(pid int) bool {
-	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, "State:") {
-			if strings.Contains(line, "Z") {
-				return false
-			}
-			break
-		}
-	}
-	exe, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
-	if err != nil {
-		return false
-	}
-	return strings.HasSuffix(exe, "/waybar")
+	return isRealProc(pid, "/waybar")
 }
 
 // waybarPIDs returns all PIDs of valid waybar processes (non-zombie, correct exe).

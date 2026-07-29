@@ -40,6 +40,18 @@ func watch(cfg *Config) {
 		timer   *time.Timer
 		timerMu sync.Mutex
 	)
+	scheduleReload := func() {
+		timerMu.Lock()
+		if timer != nil {
+			timer.Stop()
+		}
+		timer = time.AfterFunc(200*time.Millisecond, func() {
+			reload(cfg)
+		})
+		timerMu.Unlock()
+	}
+
+	go watchPowerProfiles(scheduleReload)
 
 	for {
 		select {
@@ -52,15 +64,7 @@ func watch(cfg *Config) {
 			}
 
 			logger.Info("change detected", "file", e.Name, "op", e.Op.String())
-
-			timerMu.Lock()
-			if timer != nil {
-				timer.Stop()
-			}
-			timer = time.AfterFunc(200*time.Millisecond, func() {
-				reload(cfg)
-			})
-			timerMu.Unlock()
+			scheduleReload()
 
 		case err := <-w.Errors:
 			logger.Warn("watcher error", "err", err)

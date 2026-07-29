@@ -31,6 +31,7 @@ waybar:
             action: "firefox"
       - name: Power
         children:
+          # - include: power-profiles:plain   # power-saver/balanced/performance, active one bold
           - name: Shutdown
             action: "systemctl poweroff"
           - name: Reboot

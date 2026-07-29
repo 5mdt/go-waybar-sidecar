@@ -252,6 +252,19 @@ func TestExpandIncludes_NoIncludes(t *testing.T) {
 	}
 }
 
+func TestExpandIncludes_PowerProfiles(t *testing.T) {
+	orig := scanPowerProfiles
+	scanPowerProfiles = func() []MenuItem {
+		return []MenuItem{{Name: "● Balanced", Action: "powerprofilesctl set balanced", Bold: true}}
+	}
+	t.Cleanup(func() { scanPowerProfiles = orig })
+
+	got := expandIncludes([]MenuItem{{Include: "power-profiles:plain"}})
+	if len(got) != 1 || got[0].Name != "● Balanced" || !got[0].Bold {
+		t.Fatalf("expandIncludes() = %+v, want [● Balanced (Bold)]", got)
+	}
+}
+
 func TestLoadConfigMissingFile(t *testing.T) {
 	origConfigPath := configPath
 	configPath = filepath.Join(t.TempDir(), "does-not-exist.yaml")

@@ -209,16 +209,18 @@ func addNode(parent *etree.Element, item MenuItem, actions map[string]string, id
 
 	obj.CreateAttr("class", "GtkMenuItem")
 	obj.CreateAttr("id", id)
-	prop := obj.CreateElement("property")
-	prop.CreateAttr("name", "label")
+
+	label := item.Name
+	if len(item.Children) > 0 {
+		label += " ▶"
+	}
+	setMenuItemLabel(obj, id, label, item.Bold)
 
 	if len(item.Children) == 0 {
-		prop.SetText(item.Name)
 		actions[id] = item.Action
 		return
 	}
 
-	prop.SetText(item.Name + " ▶")
 	sub := obj.CreateElement("child")
 	sub.CreateAttr("type", "submenu")
 	submenu := sub.CreateElement("object")
@@ -226,4 +228,32 @@ func addNode(parent *etree.Element, item MenuItem, actions map[string]string, id
 	for _, c := range item.Children {
 		addNode(submenu, c, actions, ids)
 	}
+}
+
+// setMenuItemLabel sets obj's (a GtkMenuItem) label. Plain items keep the
+// existing "label" property. Bold items instead get an explicit child
+// GtkLabel with Pango markup enabled, since GtkMenuItem's own "label"
+// property does not interpret markup (GWS-0029).
+func setMenuItemLabel(obj *etree.Element, id, label string, bold bool) {
+	if !bold {
+		prop := obj.CreateElement("property")
+		prop.CreateAttr("name", "label")
+		prop.SetText(label)
+		return
+	}
+
+	child := obj.CreateElement("child")
+	labelObj := child.CreateElement("object")
+	labelObj.CreateAttr("class", "GtkLabel")
+	labelObj.CreateAttr("id", id+"_label")
+
+	setProp := func(name, value string) {
+		p := labelObj.CreateElement("property")
+		p.CreateAttr("name", name)
+		p.SetText(value)
+	}
+	setProp("visible", "True")
+	setProp("use-markup", "True")
+	setProp("xalign", "0")
+	setProp("label", "<b>"+label+"</b>")
 }

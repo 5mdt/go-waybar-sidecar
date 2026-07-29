@@ -22,6 +22,10 @@ type MenuItem struct {
 	// Include, when set, replaces this item in place with a generated list of
 	// items (see expandIncludes). Name/Action/Children are ignored.
 	Include string `yaml:"include"`
+	// Bold renders the item's label with Pango markup instead of the plain
+	// GtkMenuItem label (see addNode). Set only by generators such as
+	// buildPowerProfileItems, never by user config.
+	Bold bool `yaml:"-"`
 }
 
 // Job defines a periodic command run by the jobs runner (GWS-0025).
@@ -418,6 +422,8 @@ func resolveInclude(alias string) ([]MenuItem, bool) {
 	switch alias {
 	case "applications:plain":
 		return scanApplications(), true
+	case "power-profiles:plain":
+		return scanPowerProfiles(), true
 	default:
 		return nil, false
 	}

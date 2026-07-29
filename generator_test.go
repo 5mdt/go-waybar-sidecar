@@ -316,6 +316,60 @@ func TestAddNodeDuplicateNames(t *testing.T) {
 	}
 }
 
+func TestAddNodeBold(t *testing.T) {
+	dir := t.TempDir()
+	origMenuDir := menuDir
+	menuDir = filepath.Join(dir, "gtk3-menus")
+	defer func() { menuDir = origMenuDir }()
+
+	cfg := Config{
+		Waybar: map[string]any{},
+		Menus: map[string][]MenuItem{
+			"custom/Power": {
+				{Name: "● Balanced", Action: "powerprofilesctl set balanced", Bold: true},
+				{Name: "  Performance", Action: "powerprofilesctl set performance"},
+			},
+		},
+	}
+	menus := buildXML(cfg)
+	data, err := os.ReadFile(menus["custom/Power"].path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	xml := string(data)
+
+	if !strings.Contains(xml, `class="GtkLabel"`) {
+		t.Errorf("expected a GtkLabel child for the bold item, got:\n%s", xml)
+	}
+	if !strings.Contains(xml, "use-markup") {
+		t.Errorf("expected use-markup property, got:\n%s", xml)
+	}
+	if !strings.Contains(xml, "&lt;b&gt;● Balanced&lt;/b&gt;") {
+		t.Errorf("expected bold markup text, got:\n%s", xml)
+	}
+
+	actions := menus["custom/Power"].actions
+	if actions["● Balanced"] != "powerprofilesctl set balanced" {
+		t.Errorf("actions[%q] = %q, want %q", "● Balanced", actions["● Balanced"], "powerprofilesctl set balanced")
+	}
+	if actions["  Performance"] != "powerprofilesctl set performance" {
+		t.Errorf("actions[%q] = %q, want %q", "  Performance", actions["  Performance"], "powerprofilesctl set performance")
+	}
+
+	if err := validateMenu(newDocFromFile(t, menus["custom/Power"].path)); err != nil {
+		t.Errorf("expected bold-item menu to pass validation, got: %v", err)
+	}
+}
+
+func newDocFromFile(t *testing.T, path string) *etree.Document {
+	t.Helper()
+	doc := etree.NewDocument()
+	if err := doc.ReadFromFile(path); err != nil {
+		t.Fatal(err)
+	}
+	return doc
+}
+
 func TestGenerateNoGenerate(t *testing.T) {
 	dir := t.TempDir()
 

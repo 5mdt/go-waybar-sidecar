@@ -265,6 +265,19 @@ func TestExpandIncludes_PowerProfiles(t *testing.T) {
 	}
 }
 
+func TestExpandIncludes_SessionActions(t *testing.T) {
+	orig := scanSessionActions
+	scanSessionActions = func() []MenuItem {
+		return []MenuItem{{Name: "Lock", Action: "loginctl lock-session"}}
+	}
+	t.Cleanup(func() { scanSessionActions = orig })
+
+	got := expandIncludes([]MenuItem{{Include: "session-actions:plain"}})
+	if len(got) != 1 || got[0].Name != "Lock" {
+		t.Fatalf("expandIncludes() = %+v, want [Lock]", got)
+	}
+}
+
 func TestLoadConfigMissingFile(t *testing.T) {
 	origConfigPath := configPath
 	configPath = filepath.Join(t.TempDir(), "does-not-exist.yaml")

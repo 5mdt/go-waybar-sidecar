@@ -424,6 +424,8 @@ func resolveInclude(alias string) ([]MenuItem, bool) {
 		return scanApplications(), true
 	case "power-profiles:plain":
 		return scanPowerProfiles(), true
+	case "session-actions:plain":
+		return scanSessionActions(), true
 	default:
 		return nil, false
 	}

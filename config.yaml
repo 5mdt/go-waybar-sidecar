@@ -32,6 +32,7 @@ waybar:
       - name: Power
         children:
           # - include: power-profiles:plain   # power-saver/balanced/performance, active one bold
+          # - include: session-actions:plain   # lock/logout/suspend/reboot/shutdown, only available ones
           - name: Shutdown
             action: "systemctl poweroff"
           - name: Reboot

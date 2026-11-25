@@ -37,6 +37,7 @@ func appDirs() []string {
 type desktopEntry struct {
 	name       string
 	exec       string
+	icon       string
 	categories []string
 }
 
@@ -78,6 +79,8 @@ func parseDesktopEntry(b []byte) (desktopEntry, bool) {
 			e.name = value
 		case "Exec":
 			e.exec = value
+		case "Icon":
+			e.icon = value
 		case "Categories":
 			for _, c := range strings.Split(value, ";") {
 				if c = strings.TrimSpace(c); c != "" {
@@ -139,6 +142,7 @@ var scanApplications = func() []MenuItem {
 			items = append(items, MenuItem{
 				Name:       entry.name,
 				Action:     stripFieldCodes(entry.exec),
+				Icon:       entry.icon,
 				Categories: entry.categories,
 			})
 		}
@@ -193,6 +197,22 @@ var mainCategories = map[string]string{
 
 const otherCategory = "Other"
 
+// categoryIcons maps category labels to freedesktop icon-theme names (GWS-0032).
+var categoryIcons = map[string]string{
+	"Audio & Video": "applications-multimedia",
+	"Development":   "applications-development",
+	"Education":     "applications-education",
+	"Games":         "applications-games",
+	"Graphics":      "applications-graphics",
+	"Network":       "applications-internet",
+	"Office":        "applications-office",
+	"Science":       "applications-science",
+	"Settings":      "preferences-desktop",
+	"System":        "applications-system",
+	"Utility":       "applications-utilities",
+	otherCategory:   "applications-other",
+}
+
 // categorizeApps groups apps (assumed name-sorted) into one submenu per
 // non-empty main category, sorted by label with "Other" last. mode "first"
 // places an app in the first main category it lists; anything else ("all",
@@ -226,7 +246,7 @@ func categorizeApps(apps []MenuItem, mode string) []MenuItem {
 
 	var menus []MenuItem
 	for label, children := range buckets {
-		menus = append(menus, MenuItem{Name: label, Children: children})
+		menus = append(menus, MenuItem{Name: label, Icon: categoryIcons[label], Children: children})
 	}
 	sort.Slice(menus, func(i, j int) bool {
 		if (menus[i].Name == otherCategory) != (menus[j].Name == otherCategory) {

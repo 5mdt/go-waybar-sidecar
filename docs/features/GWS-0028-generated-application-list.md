@@ -48,6 +48,8 @@ refreshes the menu without a sidecar restart.
   tolerant of missing directories via `addWatch`).
 - `isWatchedFile()` accepts `.desktop` files under any `appDirs()` path.
 
+`Icon=` is carried into `MenuItem.Icon` (see GWS-0032).
+
 ## Configuration
 
 ```yaml

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/beevik/etree"
 )
@@ -98,8 +99,9 @@ func buildXML(cfg Config) map[string]menuResult {
 		menu.CreateAttr("id", "menu")
 
 		ids := map[string]int{}
+		withIcon := hasIcon(cfg.Menus[name])
 		for _, item := range cfg.Menus[name] {
-			addNode(menu, item, menuActions, ids)
+			addNode(menu, item, menuActions, ids, withIcon)
 		}
 
 		doc.Indent(2)
@@ -190,7 +192,7 @@ func backupFile(path string) error {
 	return os.Rename(path, path+".bak")
 }
 
-func addNode(parent *etree.Element, item MenuItem, actions map[string]string, ids map[string]int) {
+func addNode(parent *etree.Element, item MenuItem, actions map[string]string, ids map[string]int, withIcon bool) {
 	child := parent.CreateElement("child")
 	obj := child.CreateElement("object")
 
@@ -210,7 +212,7 @@ func addNode(parent *etree.Element, item MenuItem, actions map[string]string, id
 	obj.CreateAttr("class", "GtkMenuItem")
 	obj.CreateAttr("id", id)
 
-	setMenuItemLabel(obj, id, item.Name, item.Bold)
+	setMenuItemLabel(obj, id, item, withIcon)
 
 	if len(item.Children) == 0 {
 		actions[id] = item.Action
@@ -221,35 +223,115 @@ func addNode(parent *etree.Element, item MenuItem, actions map[string]string, id
 	sub.CreateAttr("type", "submenu")
 	submenu := sub.CreateElement("object")
 	submenu.CreateAttr("class", "GtkMenu")
+	childIcons := hasIcon(item.Children)
 	for _, c := range item.Children {
-		addNode(submenu, c, actions, ids)
+		addNode(submenu, c, actions, ids, childIcons)
 	}
+}
+
+// hasIcon reports whether any item of a menu level has an icon, which
+// switches the whole level to the icon layout (GWS-0032).
+func hasIcon(items []MenuItem) bool {
+	for _, it := range items {
+		if it.Icon != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// iconUsable reports whether icon should be emitted: non-empty and,
+// for a file path (contains "/"), existing. Theme names are not validated.
+func iconUsable(icon string) bool {
+	if icon == "" {
+		return false
+	}
+	if !strings.Contains(icon, "/") {
+		return true
+	}
+	if _, err := os.Stat(icon); err != nil {
+		logger.Debug("icon file not found, using blank slot", "path", icon)
+		return false
+	}
+	return true
+}
+
+func setProp(obj *etree.Element, name, value string) {
+	p := obj.CreateElement("property")
+	p.CreateAttr("name", name)
+	p.SetText(value)
+}
+
+// isGlyph reports whether icon is a single character (e.g. a Nerd Font glyph).
+func isGlyph(icon string) bool {
+	return utf8.RuneCountInString(icon) == 1
+}
+
+// addIconSlot appends the 16px icon slot to box: a GtkLabel for a glyph,
+// otherwise a GtkImage (blank when the icon is unusable).
+func addIconSlot(box *etree.Element, id, icon string) {
+	slot := box.CreateElement("child").CreateElement("object")
+	class := "GtkImage"
+	if isGlyph(icon) {
+		class = "GtkLabel"
+	}
+	slot.CreateAttr("class", class)
+	slot.CreateAttr("id", id+"_icon")
+	setProp(slot, "visible", "True")
+
+	if class == "GtkLabel" {
+		setProp(slot, "width-request", "16")
+		setProp(slot, "xalign", "0.5")
+		setProp(slot, "label", icon)
+		return
+	}
+
+	setProp(slot, "pixel-size", "16")
+	if !iconUsable(icon) {
+		return
+	}
+	// GtkBuilder cannot parse a GIcon from a string, so use the
+	// string-typed properties instead.
+	prop := "icon-name"
+	if strings.Contains(icon, "/") {
+		prop = "file"
+	}
+	setProp(slot, prop, icon)
 }
 
 // setMenuItemLabel sets obj's (a GtkMenuItem) label. Plain items keep the
 // existing "label" property. Bold items instead get an explicit child
 // GtkLabel with Pango markup enabled, since GtkMenuItem's own "label"
-// property does not interpret markup (GWS-0029).
-func setMenuItemLabel(obj *etree.Element, id, label string, bold bool) {
-	if !bold {
-		prop := obj.CreateElement("property")
-		prop.CreateAttr("name", "label")
-		prop.SetText(label)
+// property does not interpret markup (GWS-0029). With withIcon the child is
+// a GtkBox of a 16px GtkImage (blank when the icon is unusable) and the
+// label (GWS-0032).
+func setMenuItemLabel(obj *etree.Element, id string, item MenuItem, withIcon bool) {
+	if !item.Bold && !withIcon {
+		setProp(obj, "label", item.Name)
 		return
 	}
 
-	child := obj.CreateElement("child")
-	labelObj := child.CreateElement("object")
+	parent := obj.CreateElement("child")
+	if withIcon {
+		box := parent.CreateElement("object")
+		box.CreateAttr("class", "GtkBox")
+		box.CreateAttr("id", id+"_box")
+		setProp(box, "visible", "True")
+		setProp(box, "spacing", "6")
+
+		addIconSlot(box, id, item.Icon)
+		parent = box.CreateElement("child")
+	}
+
+	labelObj := parent.CreateElement("object")
 	labelObj.CreateAttr("class", "GtkLabel")
 	labelObj.CreateAttr("id", id+"_label")
-
-	setProp := func(name, value string) {
-		p := labelObj.CreateElement("property")
-		p.CreateAttr("name", name)
-		p.SetText(value)
+	setProp(labelObj, "visible", "True")
+	setProp(labelObj, "xalign", "0")
+	if item.Bold {
+		setProp(labelObj, "use-markup", "True")
+		setProp(labelObj, "label", "<b>"+item.Name+"</b>")
+	} else {
+		setProp(labelObj, "label", item.Name)
 	}
-	setProp("visible", "True")
-	setProp("use-markup", "True")
-	setProp("xalign", "0")
-	setProp("label", "<b>"+label+"</b>")
 }

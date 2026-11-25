@@ -307,3 +307,42 @@ func TestCategorizeApps_NoOther(t *testing.T) {
 		t.Errorf("categorizeApps() = %v, want only Development", got)
 	}
 }
+
+func TestParseDesktopEntry_Icon(t *testing.T) {
+	b := []byte("[Desktop Entry]\nType=Application\nName=Firefox\nExec=firefox\nIcon=firefox\n")
+	e, ok := parseDesktopEntry(b)
+	if !ok {
+		t.Fatal("parseDesktopEntry() ok = false, want true")
+	}
+	if e.icon != "firefox" {
+		t.Errorf("icon = %q, want %q", e.icon, "firefox")
+	}
+}
+
+func TestCategoryIcons(t *testing.T) {
+	labels := []string{otherCategory}
+	for _, l := range mainCategories {
+		labels = append(labels, l)
+	}
+	for _, l := range labels {
+		if categoryIcons[l] == "" {
+			t.Errorf("categoryIcons[%q] missing", l)
+		}
+	}
+}
+
+func TestCategorizeAppsIcons(t *testing.T) {
+	got := categorizeApps([]MenuItem{
+		{Name: "Editor", Categories: []string{"Development"}},
+		{Name: "Misc"},
+	}, "all")
+	want := map[string]string{"Development": "applications-development", "Other": "applications-other"}
+	if len(got) != len(want) {
+		t.Fatalf("got %d submenus, want %d", len(got), len(want))
+	}
+	for _, m := range got {
+		if m.Icon != want[m.Name] {
+			t.Errorf("%s icon = %q, want %q", m.Name, m.Icon, want[m.Name])
+		}
+	}
+}

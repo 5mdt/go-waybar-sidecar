@@ -425,3 +425,94 @@ func TestGenerateNoGenerate(t *testing.T) {
 		t.Errorf("expected %s to exist: %v", outJSON, err)
 	}
 }
+
+func buildIconMenu(t *testing.T, items []MenuItem) string {
+	t.Helper()
+	origMenuDir := menuDir
+	menuDir = filepath.Join(t.TempDir(), "gtk3-menus")
+	defer func() { menuDir = origMenuDir }()
+
+	menus := buildXML(Config{Waybar: map[string]any{}, Menus: map[string][]MenuItem{"custom/Start": items}})
+	path := menus["custom/Start"].path
+	if err := validateMenu(newDocFromFile(t, path)); err != nil {
+		t.Errorf("menu failed validation: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func TestAddNodeIcon(t *testing.T) {
+	xml := buildIconMenu(t, []MenuItem{
+		{Name: "Firefox", Action: "firefox", Icon: "firefox"},
+		{Name: "Plain", Action: "plain"},
+		{Name: "Gone", Action: "gone", Icon: "/nonexistent/icon.png"},
+	})
+
+	for _, want := range []string{`class="GtkBox"`, `class="GtkImage"`, `id="Firefox_icon"`, `id="Plain_icon"`, `id="Gone_icon"`, `class="GtkLabel"`} {
+		if !strings.Contains(xml, want) {
+			t.Errorf("expected %s in XML:\n%s", want, xml)
+		}
+	}
+	if strings.Contains(xml, `name="gicon"`) || strings.Contains(xml, `name="file"`) {
+		t.Errorf("expected only one icon-name property, no gicon/file:\n%s", xml)
+	}
+	if n := strings.Count(xml, `name="icon-name"`); n != 1 {
+		t.Errorf("icon-name count = %d, want 1 (only the usable icon):\n%s", n, xml)
+	}
+	if !strings.Contains(xml, `"icon-name">firefox</property>`) {
+		t.Errorf("expected icon-name firefox:\n%s", xml)
+	}
+	if n := strings.Count(xml, `name="pixel-size"`); n != 3 {
+		t.Errorf("pixel-size count = %d, want 3 (blank slots too):\n%s", n, xml)
+	}
+}
+
+func TestAddNodeIconExistingPath(t *testing.T) {
+	icon := filepath.Join(t.TempDir(), "i.png")
+	if err := os.WriteFile(icon, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	xml := buildIconMenu(t, []MenuItem{{Name: "A", Action: "a", Icon: icon}})
+	if !strings.Contains(xml, `"file">`+icon+"</property>") {
+		t.Errorf("expected file %s:\n%s", icon, xml)
+	}
+}
+
+func TestAddNodeIconBold(t *testing.T) {
+	xml := buildIconMenu(t, []MenuItem{{Name: "B", Action: "b", Icon: "x", Bold: true}})
+	if !strings.Contains(xml, "&lt;b&gt;B&lt;/b&gt;") || !strings.Contains(xml, "use-markup") {
+		t.Errorf("expected bold markup label in icon layout:\n%s", xml)
+	}
+}
+
+func TestAddNodeNoIconsUnchanged(t *testing.T) {
+	xml := buildIconMenu(t, []MenuItem{{Name: "A", Action: "a"}})
+	if strings.Contains(xml, "GtkBox") || strings.Contains(xml, "GtkImage") {
+		t.Errorf("expected no icon layout without icons:\n%s", xml)
+	}
+}
+
+func TestAddNodeIconGlyph(t *testing.T) {
+	xml := buildIconMenu(t, []MenuItem{
+		{Name: "Launcher", Action: "l", Icon: "\U000F0463"},
+		{Name: "Plain", Action: "p"},
+	})
+	if !strings.Contains(xml, `<object class="GtkLabel" id="Launcher_icon">`) {
+		t.Errorf("expected GtkLabel icon slot:\n%s", xml)
+	}
+	if !strings.Contains(xml, ">\U000F0463</property>") || !strings.Contains(xml, `name="width-request">16<`) {
+		t.Errorf("expected glyph text and width-request 16:\n%s", xml)
+	}
+	if strings.Contains(xml, `class="GtkImage" id="Launcher_icon"`) {
+		t.Errorf("glyph item must not have a GtkImage:\n%s", xml)
+	}
+	if strings.Contains(xml, `name="icon-name"`) || strings.Contains(xml, `name="file"`) {
+		t.Errorf("glyph must not set icon-name/file:\n%s", xml)
+	}
+	if !strings.Contains(xml, `class="GtkImage" id="Plain_icon"`) {
+		t.Errorf("sibling should keep the blank GtkImage slot:\n%s", xml)
+	}
+}

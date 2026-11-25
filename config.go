@@ -19,6 +19,8 @@ type MenuItem struct {
 	Name     string     `yaml:"name"`
 	Action   string     `yaml:"action"`
 	Children []MenuItem `yaml:"children"`
+	// Icon is an icon-theme name, or a file path if it contains "/" (GWS-0032).
+	Icon string `yaml:"icon"`
 	// Include, when set, replaces this item in place with a generated list of
 	// items (see expandIncludes). Name/Action/Children are ignored.
 	Include string `yaml:"include"`

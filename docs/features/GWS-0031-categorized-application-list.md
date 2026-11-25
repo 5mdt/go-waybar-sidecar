@@ -24,6 +24,8 @@ It is rescanned on every config load, like `applications:plain`.
   - `first`: app goes to the first main category in its `Categories=` order.
   - No main category: "Other".
   - Unknown `mode`: warning, treated as `all`.
+  - Each submenu gets `Icon` from `categoryIcons` (fixed freedesktop names,
+    e.g. Development -> `applications-development`), rendered per GWS-0032.
 
 `config.go`:
 - `MenuItem.Mode` (`yaml:"mode"`), `MenuItem.Categories` (`yaml:"-"`, set only
@@ -57,6 +59,8 @@ It is rescanned on every config load, like `applications:plain`.
 - `categorizeApps`: `all` (default) places a multi-category app in each
   category; `first` places it once; non-main or missing categories → "Other" (last); empty categories
   absent; labels and ordering as above.
+- `categoryIcons` has an entry for every `mainCategories` label and "Other";
+  `categorizeApps` sets it as the submenu `Icon`.
 - `expandIncludes`: `applications:categories` yields category submenus;
   invalid `mode` equals `all`.
 

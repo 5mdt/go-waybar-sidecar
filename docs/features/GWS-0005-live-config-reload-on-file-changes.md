@@ -20,17 +20,21 @@ edits.
   - Ignores events on the sidecar's own outputs (`outJSON`, and any file
     under `menuDir`), to avoid reacting to its own writes.
   - Ignores files not in the per-directory whitelist via `isWatchedFile()`:
-    files under `gwsDir` must have extension `.yaml` or `.yml`; all other
-    files under `waybarDir` must have extension `.json`, `.jsonc`, or `.css`.
+    files under `gwsDir` must have extension `.yaml` or `.yml`; files under
+    `waybarDir` must have extension `.json`, `.jsonc`, or `.css`.
     Editor artifacts (`.swp`, `~`, `.bak`, all-numeric names, etc.) are
     implicitly excluded as their extensions are not whitelisted.
   - Otherwise logs the change and (re)starts a 200ms debounce timer. When the
     timer fires, it calls `reload(cfg)`, which calls `loadConfig()` and
     `generate()` with the result stored back into `*cfg`; if `loadConfig()`
-    fails, the previous `*cfg` is kept (see GWS-0017). Note: `timer.Stop()`
-    cannot cancel a timer whose callback has already fired, so two
-    `reload()` calls can overlap under rapid events; serialization is
-    guaranteed downstream in `reloadWaybar()` (see GWS-0007).
+    fails, the previous `*cfg` is kept (see GWS-0017). `reload()` holds
+    `reloadCfgMu` for its whole run, so overlapping debounce callbacks are
+    serialized and never race on `*cfg`.
+- Directories created after startup under a watched root are added via
+  `addWatch()` (`handleCreate()`). A root missing at startup is tracked in
+  `pending`; its nearest existing ancestor is watched, and the root is added
+  once it appears (a created directory that is an ancestor of a pending root
+  is watched too). A new app dir triggers a reload.
 - Watcher errors are logged at warn and do not stop the loop.
 
 ## Configuration
@@ -63,6 +67,11 @@ edits.
   `4913`, `style.css~`.
 - `isWatchedFile()` under `gwsDir`: assert true for `config.yaml`, `foo.yml`;
   assert false for `config.json`, `.config.yaml.swp`, `config.yaml~`.
+
+- `handleCreate()`: a new subdirectory and a pending root get watched
+  (`w.WatchList()`); `nearestExisting()` returns the closest existing
+  ancestor; `isWatchedFile()` is false for `.json` outside `waybarDir`.
+- `reload()` called concurrently passes under `-race`.
 
 ### Integration Testing
 

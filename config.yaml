@@ -30,6 +30,9 @@ waybar:
             action: "foot"
           - name: Browser
             action: "firefox"
+          - name: "---"          # separator line
+          - name: Files
+            action: "nautilus"
       - name: Power
         children:
           # - include: power-profiles:plain   # power-saver/balanced/performance, active one bold

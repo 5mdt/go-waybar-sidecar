@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/beevik/etree"
 )
@@ -142,8 +143,8 @@ func TestBackupFile(t *testing.T) {
 	if err := backupFile(path); err != nil {
 		t.Fatalf("backupFile: %v", err)
 	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Errorf("expected %s to be renamed away, err = %v", path, err)
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("expected %s to still exist, err = %v", path, err)
 	}
 	data, err := os.ReadFile(bak)
 	if err != nil {
@@ -151,6 +152,51 @@ func TestBackupFile(t *testing.T) {
 	}
 	if string(data) != "old" {
 		t.Errorf("backup content = %q, want %q", data, "old")
+	}
+}
+
+func TestWriteFileAtomic(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sub", "out.txt")
+
+	if err := writeFileAtomic(path, []byte("one")); err != nil {
+		t.Fatalf("writeFileAtomic: %v", err)
+	}
+	if err := writeFileAtomic(path, []byte("two")); err != nil {
+		t.Fatalf("writeFileAtomic overwrite: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != "two" {
+		t.Fatalf("content = %q, err = %v, want %q", data, err, "two")
+	}
+	entries, _ := os.ReadDir(filepath.Dir(path))
+	if len(entries) != 1 {
+		t.Errorf("expected only the output file, got %d entries", len(entries))
+	}
+}
+
+func TestWriteJSONUnchangedIsNotRewritten(t *testing.T) {
+	dir := t.TempDir()
+	origOutJSON := outJSON
+	outJSON = filepath.Join(dir, "config.jsonc")
+	defer func() { outJSON = origOutJSON }()
+
+	cfg := map[string]any{"clock": map[string]any{"format": "same"}}
+	writeJSON(cfg, nil)
+	before, err := os.Stat(outJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(20 * time.Millisecond)
+	writeJSON(cfg, nil)
+
+	after, _ := os.Stat(outJSON)
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Error("identical output was rewritten")
+	}
+	if _, err := os.Stat(outJSON + ".bak"); !os.IsNotExist(err) {
+		t.Errorf("unexpected .bak for unchanged output, err = %v", err)
 	}
 }
 
@@ -306,13 +352,40 @@ func TestAddNodeDuplicateNames(t *testing.T) {
 	xml := string(data)
 	actions := menus["custom/Start"].actions
 
-	for _, wantID := range []string{"Firefox", "Firefox_2", "Firefox_3"} {
+	for _, wantID := range []string{"item1", "item2", "item3"} {
 		if !strings.Contains(xml, `id="`+wantID+`"`) {
 			t.Errorf("expected id=%q in XML:\n%s", wantID, xml)
 		}
 		if _, ok := actions[wantID]; !ok {
 			t.Errorf("expected actions[%q] to be set", wantID)
 		}
+	}
+}
+
+func TestBuildXMLIDsNeverCollide(t *testing.T) {
+	xml := buildIconMenu(t, []MenuItem{
+		{Name: "Foo", Action: "a"},
+		{Name: "Foo", Action: "b"},
+		{Name: "Foo_2", Action: "c"},
+		{Name: "sep1", Action: "d"},
+		{Name: "---"},
+	})
+	if !strings.Contains(xml, `id="sep5"`) || !strings.Contains(xml, `id="item4"`) {
+		t.Errorf("expected counter-based ids:\n%s", xml)
+	}
+}
+
+func TestAddNodeBoldEscapesMarkup(t *testing.T) {
+	root := etree.NewElement("menu")
+	n := 0
+	addNode(root, MenuItem{Name: "A & <B>", Action: "x", Bold: true}, map[string]string{}, &n, false)
+
+	var label string
+	for _, p := range root.FindElements("//object[@class='GtkLabel']/property[@name='label']") {
+		label = p.Text()
+	}
+	if label != "<b>A &amp; &lt;B&gt;</b>" {
+		t.Errorf("label = %q, want escaped markup", label)
 	}
 }
 
@@ -349,11 +422,11 @@ func TestAddNodeBold(t *testing.T) {
 	}
 
 	actions := menus["custom/Power"].actions
-	if actions["● Balanced"] != "powerprofilesctl set balanced" {
-		t.Errorf("actions[%q] = %q, want %q", "● Balanced", actions["● Balanced"], "powerprofilesctl set balanced")
+	if actions["item1"] != "powerprofilesctl set balanced" {
+		t.Errorf("actions[item1] = %q, want %q", actions["item1"], "powerprofilesctl set balanced")
 	}
-	if actions["  Performance"] != "powerprofilesctl set performance" {
-		t.Errorf("actions[%q] = %q, want %q", "  Performance", actions["  Performance"], "powerprofilesctl set performance")
+	if actions["item2"] != "powerprofilesctl set performance" {
+		t.Errorf("actions[item2] = %q, want %q", actions["item2"], "powerprofilesctl set performance")
 	}
 
 	if err := validateMenu(newDocFromFile(t, menus["custom/Power"].path)); err != nil {
@@ -451,7 +524,7 @@ func TestAddNodeIcon(t *testing.T) {
 		{Name: "Gone", Action: "gone", Icon: "/nonexistent/icon.png"},
 	})
 
-	for _, want := range []string{`class="GtkBox"`, `class="GtkImage"`, `id="Firefox_icon"`, `id="Plain_icon"`, `id="Gone_icon"`, `class="GtkLabel"`} {
+	for _, want := range []string{`class="GtkBox"`, `class="GtkImage"`, `id="item1_icon"`, `id="item2_icon"`, `id="item3_icon"`, `class="GtkLabel"`} {
 		if !strings.Contains(xml, want) {
 			t.Errorf("expected %s in XML:\n%s", want, xml)
 		}
@@ -500,19 +573,19 @@ func TestAddNodeIconGlyph(t *testing.T) {
 		{Name: "Launcher", Action: "l", Icon: "\U000F0463"},
 		{Name: "Plain", Action: "p"},
 	})
-	if !strings.Contains(xml, `<object class="GtkLabel" id="Launcher_icon">`) {
+	if !strings.Contains(xml, `<object class="GtkLabel" id="item1_icon">`) {
 		t.Errorf("expected GtkLabel icon slot:\n%s", xml)
 	}
 	if !strings.Contains(xml, ">\U000F0463</property>") || !strings.Contains(xml, `name="width-request">16<`) {
 		t.Errorf("expected glyph text and width-request 16:\n%s", xml)
 	}
-	if strings.Contains(xml, `class="GtkImage" id="Launcher_icon"`) {
+	if strings.Contains(xml, `class="GtkImage" id="item1_icon"`) {
 		t.Errorf("glyph item must not have a GtkImage:\n%s", xml)
 	}
 	if strings.Contains(xml, `name="icon-name"`) || strings.Contains(xml, `name="file"`) {
 		t.Errorf("glyph must not set icon-name/file:\n%s", xml)
 	}
-	if !strings.Contains(xml, `class="GtkImage" id="Plain_icon"`) {
+	if !strings.Contains(xml, `class="GtkImage" id="item2_icon"`) {
 		t.Errorf("sibling should keep the blank GtkImage slot:\n%s", xml)
 	}
 }

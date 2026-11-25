@@ -17,16 +17,16 @@ Two generator defects cause waybar to crash or fail to open a menu:
 ## Implementation
 
 `generator.go` `addNode`:
-- Accepts an additional `ids map[string]int` argument tracking per-name usage
-  counts, shared across the whole document.
+- Takes a per-menu counter `n *int`, shared across the whole document
+  (submenus included) and incremented once per item or separator.
 - For `item.Name == "---"`: emits `<object class="GtkSeparatorMenuItem"
-  id="sepN"/>` (where N is a counter); no entry is added to `actions`.
-- For all other items: increments `ids[item.Name]`; uses `item.Name` as the
-  element ID for the first occurrence and `item.Name_N` for subsequent ones
-  (N ≥ 2). The actions map key uses the same unique ID.
+  id="sepN"/>`; no entry is added to `actions`.
+- For all other items: the element ID is `itemN`, never derived from the
+  name, so ids cannot collide whatever the names are. The actions map key is
+  the same ID. Sub-objects use `<id>_box`, `<id>_icon`, `<id>_label`.
 
-`buildXML` initialises `ids := map[string]int{}` per menu and passes it into
-every top-level `addNode` call.
+`buildXML` starts `n := 0` per menu and passes `&n` into every top-level
+`addNode` call.
 
 ## Configuration
 
@@ -45,10 +45,10 @@ No config change. `name: "---"` in `menu_definition` is the separator trigger.
 
 - `addNode` with `name: "---"`: assert `GtkSeparatorMenuItem` is emitted and
   `actions` is not updated.
-- `addNode` with two leaf items sharing the same name: assert the second item's
-  element `id` is `Name_2` and both entries appear in `actions`.
-- `addNode` with three items of the same name: assert IDs are `Name`, `Name_2`,
-  `Name_3`.
+- `buildXML` with three items of the same name: assert IDs are `item1`,
+  `item2`, `item3` and each appears in `actions`.
+- Names `Foo`, `Foo`, `Foo_2`, `sep1`, `---` together: assert all ids are
+  unique and `validateMenuDoc` passes.
 
 ### Integration Testing
 

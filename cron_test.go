@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,7 +92,7 @@ func TestRunJob_InvokedOnTick(t *testing.T) {
 	origExec := jobExec
 
 	var calls atomic.Int32
-	jobExec = func(_ string) ([]byte, error) {
+	jobExec = func(_ context.Context, _ string) ([]byte, error) {
 		calls.Add(1)
 		return []byte("ok"), nil
 	}
@@ -143,7 +144,7 @@ func TestRunJob_CancelStopsLoop(t *testing.T) {
 	defer func() { jobNow = origNow; jobExec = origExec }()
 
 	var calls atomic.Int32
-	jobExec = func(_ string) ([]byte, error) {
+	jobExec = func(_ context.Context, _ string) ([]byte, error) {
 		calls.Add(1)
 		return nil, nil
 	}
@@ -184,7 +185,7 @@ func TestRunJob_OutputWritten(t *testing.T) {
 	origNow := jobNow
 	origExec := jobExec
 
-	jobExec = func(_ string) ([]byte, error) {
+	jobExec = func(_ context.Context, _ string) ([]byte, error) {
 		return []byte("  hello world\n"), nil
 	}
 
@@ -237,7 +238,7 @@ func TestJobRunner_RestartStopsOldSet(t *testing.T) {
 
 	var mu sync.Mutex
 	callsByName := map[string]int{}
-	jobExec = func(cmd string) ([]byte, error) {
+	jobExec = func(_ context.Context, cmd string) ([]byte, error) {
 		mu.Lock()
 		callsByName[cmd]++
 		mu.Unlock()
@@ -282,4 +283,93 @@ func TestJobRunner_RestartStopsOldSet(t *testing.T) {
 
 	// Cleanup.
 	jr.restart(nil)
+}
+
+func TestParseSchedule_NonPositiveEvery(t *testing.T) {
+	for _, every := range []string{"0s", "-5m"} {
+		if _, err := parseSchedule(Job{Name: "t", Every: every, Command: "x"}); err == nil {
+			t.Errorf("every %q: expected error, got nil", every)
+		}
+	}
+}
+
+func TestRunJob_FailureKeepsOutput(t *testing.T) {
+	origExec := jobExec
+	defer func() { jobExec = origExec }()
+
+	var calls atomic.Int32
+	jobExec = func(_ context.Context, _ string) ([]byte, error) {
+		calls.Add(1)
+		return []byte("partial"), errors.New("boom")
+	}
+
+	outFile := filepath.Join(t.TempDir(), "out.txt")
+	if err := os.WriteFile(outFile, []byte("previous"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	j := Job{Name: "t", Every: "5ms", Command: "x", Output: outFile}
+	s, _ := parseSchedule(j)
+	done := make(chan struct{})
+	go func() { defer close(done); runJob(ctx, j, s) }()
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for calls.Load() < 1 && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
+	b, _ := os.ReadFile(outFile)
+	if string(b) != "previous" {
+		t.Errorf("output after failed job = %q, want %q", b, "previous")
+	}
+}
+
+func TestJobRunner_RestartSameJobsIsNoop(t *testing.T) {
+	origExec := jobExec
+	defer func() { jobExec = origExec }()
+
+	var started atomic.Int32
+	jobExec = func(ctx context.Context, _ string) ([]byte, error) {
+		started.Add(1)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+
+	var jr jobRunner
+	defer jr.restart(nil)
+	jobs := []Job{{Name: "a", Every: "5ms", Command: "a"}}
+
+	jr.restart(jobs)
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for started.Load() < 1 && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Millisecond)
+	}
+	if started.Load() != 1 {
+		t.Fatalf("job did not start, started = %d", started.Load())
+	}
+
+	// A restart would cancel the blocked run and start a new one.
+	jr.restart([]Job{{Name: "a", Every: "5ms", Command: "a"}})
+	time.Sleep(50 * time.Millisecond)
+	if started.Load() != 1 {
+		t.Errorf("identical restart re-ran the job, started = %d", started.Load())
+	}
+}
+
+func TestJobRunner_RestartNotBlockedByHungJob(t *testing.T) {
+	var jr jobRunner
+	jr.restart([]Job{{Name: "hang", Every: "5ms", Command: "sleep 10"}})
+	time.Sleep(50 * time.Millisecond) // let it start sleeping
+
+	done := make(chan struct{})
+	go func() { jr.restart(nil); close(done) }()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("restart blocked by a hung job")
+	}
 }

@@ -3,7 +3,11 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"sync"
 	"testing"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 func TestIsWatchedFile(t *testing.T) {
@@ -41,6 +45,16 @@ func TestIsWatchedFile(t *testing.T) {
 		if got := isWatchedFile(name); got != want {
 			t.Errorf("isWatchedFile(%q) = %v, want %v", name, got, want)
 		}
+	}
+}
+
+func TestIsWatchedFile_OutsideWatchedDirs(t *testing.T) {
+	origWaybarDir, origGwsDir := waybarDir, gwsDir
+	waybarDir, gwsDir = t.TempDir(), t.TempDir()
+	defer func() { waybarDir, gwsDir = origWaybarDir, origGwsDir }()
+
+	if isWatchedFile(filepath.Join(t.TempDir(), "foo.json")) {
+		t.Error("a .json file outside waybarDir must not be watched")
 	}
 }
 
@@ -245,5 +259,105 @@ func TestReloadKeepsPreviousConfigOnError(t *testing.T) {
 	}
 	if reloadCount != 0 {
 		t.Errorf("reload calls = %d, want 0 (no regeneration on load error)", reloadCount)
+	}
+}
+
+func TestReloadConcurrent(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(file, []byte("waybar:\n  layer: top\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	origConfigPath, origNoGenerate, origDoReload := configPath, noGenerate, doReload
+	origMenuDir, origOutJSON := menuDir, outJSON
+	configPath, noGenerate = file, false
+	menuDir, outJSON = filepath.Join(dir, "menus"), filepath.Join(dir, "config.jsonc")
+	doReload = func() {}
+	defer func() {
+		configPath, noGenerate, doReload = origConfigPath, origNoGenerate, origDoReload
+		menuDir, outJSON = origMenuDir, origOutJSON
+		jobs.restart(nil)
+	}()
+
+	var cfg Config
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); reload(&cfg) }()
+	}
+	wg.Wait()
+}
+
+func TestNearestExisting(t *testing.T) {
+	dir := t.TempDir()
+	if got := nearestExisting(filepath.Join(dir, "a", "b", "c")); got != dir {
+		t.Errorf("nearestExisting = %q, want %q", got, dir)
+	}
+	if got := nearestExisting(dir); got != dir {
+		t.Errorf("nearestExisting(existing) = %q, want %q", got, dir)
+	}
+}
+
+func newTestWatcher(t *testing.T) *fsnotify.Watcher {
+	t.Helper()
+	w, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { w.Close() })
+	return w
+}
+
+func TestHandleCreate_NewSubdirectory(t *testing.T) {
+	root := t.TempDir()
+	w := newTestWatcher(t)
+	sub := filepath.Join(root, "sub", "deeper")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+
+	handleCreate(w, fsnotify.Event{Name: filepath.Join(root, "sub"), Op: fsnotify.Create}, []string{root}, map[string]bool{})
+	handleCreate(w, fsnotify.Event{Name: outside, Op: fsnotify.Create}, []string{root}, map[string]bool{})
+
+	list := w.WatchList()
+	for _, want := range []string{filepath.Join(root, "sub"), sub} {
+		if !slices.Contains(list, want) {
+			t.Errorf("expected %q to be watched, list = %v", want, list)
+		}
+	}
+	if slices.Contains(list, outside) {
+		t.Errorf("directory outside the roots must not be watched: %v", list)
+	}
+}
+
+func TestHandleCreate_PendingRoot(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", filepath.Join(base, "share"))
+	t.Setenv("XDG_DATA_DIRS", "")
+	root := filepath.Join(base, "share", "applications")
+	roots := []string{root}
+	pending := map[string]bool{root: true}
+	w := newTestWatcher(t)
+
+	if err := os.Mkdir(filepath.Join(base, "share"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if handleCreate(w, fsnotify.Event{Name: filepath.Join(base, "share"), Op: fsnotify.Create}, roots, pending) {
+		t.Error("creating an ancestor must not report an app dir")
+	}
+	if !slices.Contains(w.WatchList(), filepath.Join(base, "share")) || !pending[root] {
+		t.Errorf("ancestor should be watched and root still pending: %v %v", w.WatchList(), pending)
+	}
+
+	if err := os.Mkdir(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !handleCreate(w, fsnotify.Event{Name: root, Op: fsnotify.Create}, roots, pending) {
+		t.Error("creating the app dir root must report true so apps get listed")
+	}
+	if !slices.Contains(w.WatchList(), root) || pending[root] {
+		t.Errorf("root should be watched and no longer pending: %v %v", w.WatchList(), pending)
 	}
 }

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"html"
 	"os"
 	"path/filepath"
 	"sort"
@@ -98,10 +100,10 @@ func buildXML(cfg Config) map[string]menuResult {
 		menu.CreateAttr("class", "GtkMenu")
 		menu.CreateAttr("id", "menu")
 
-		ids := map[string]int{}
+		n := 0
 		withIcon := hasIcon(cfg.Menus[name])
 		for _, item := range cfg.Menus[name] {
-			addNode(menu, item, menuActions, ids, withIcon)
+			addNode(menu, item, menuActions, &n, withIcon)
 		}
 
 		doc.Indent(2)
@@ -110,7 +112,11 @@ func buildXML(cfg Config) map[string]menuResult {
 			logger.Error("invalid menu XML, skipping", "menu", name, "err", err, notifyOpen("Open menu", path))
 			continue
 		}
-		if err := doc.WriteToFile(path); err != nil {
+		data, err := doc.WriteToBytes()
+		if err == nil {
+			err = writeFileAtomic(path, data)
+		}
+		if err != nil {
 			logger.Error("failed to write XML", "path", path, "err", err)
 			continue
 		}
@@ -158,56 +164,85 @@ func writeJSON(waybar map[string]any, menus map[string]menuResult) {
 		waybar[name] = mod
 	}
 
+	data, err := json.MarshalIndent(waybar, "", "  ")
+	if err != nil {
+		logger.Error("failed to encode JSON", "path", outJSON, "err", err)
+		return
+	}
+	data = append(data, '\n')
+
+	if prev, err := os.ReadFile(outJSON); err == nil && bytes.Equal(prev, data) {
+		logger.Debug("JSON unchanged", "path", outJSON)
+		return
+	}
+
 	if err := backupFile(outJSON); err != nil {
 		logger.Warn("failed to back up previous output", "path", outJSON, "err", err)
 	}
 
-	f, err := os.Create(outJSON)
-	if err != nil {
-		logger.Error("failed to create JSON file", "path", outJSON, "err", err)
-		return
-	}
-	defer f.Close()
-
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(waybar); err != nil {
-		logger.Error("failed to encode JSON", "path", outJSON, "err", err)
+	if err := writeFileAtomic(outJSON, data); err != nil {
+		logger.Error("failed to write JSON file", "path", outJSON, "err", err)
 		return
 	}
 
 	logger.Debug("JSON written", "path", outJSON)
 }
 
-// backupFile renames path to path+".bak" if it exists, preserving the
+// backupFile copies path to path+".bak" if it exists, preserving the
 // previous output in case the new one is broken. It is a no-op if path does
 // not exist.
 func backupFile(path string) error {
-	if _, err := os.Stat(path); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
 		return err
 	}
-	return os.Rename(path, path+".bak")
+	return os.WriteFile(path+".bak", data, 0o644)
 }
 
-func addNode(parent *etree.Element, item MenuItem, actions map[string]string, ids map[string]int, withIcon bool) {
+// writeFileAtomic writes data to a temp file next to path and renames it into
+// place, so readers never see a missing or partial file. The parent
+// directory is created if needed.
+func writeFileAtomic(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, filepath.Base(path)+".tmp*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	_, err = f.Write(data)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp, 0o644)
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		os.Remove(tmp)
+	}
+	return err
+}
+
+func addNode(parent *etree.Element, item MenuItem, actions map[string]string, n *int, withIcon bool) {
 	child := parent.CreateElement("child")
 	obj := child.CreateElement("object")
 
+	*n++
 	if item.Name == "---" {
-		ids["---"]++
 		obj.CreateAttr("class", "GtkSeparatorMenuItem")
-		obj.CreateAttr("id", fmt.Sprintf("sep%d", ids["---"]))
+		obj.CreateAttr("id", fmt.Sprintf("sep%d", *n))
 		return
 	}
 
-	ids[item.Name]++
-	id := item.Name
-	if ids[item.Name] > 1 {
-		id = fmt.Sprintf("%s_%d", item.Name, ids[item.Name])
-	}
+	id := fmt.Sprintf("item%d", *n)
 
 	obj.CreateAttr("class", "GtkMenuItem")
 	obj.CreateAttr("id", id)
@@ -225,7 +260,7 @@ func addNode(parent *etree.Element, item MenuItem, actions map[string]string, id
 	submenu.CreateAttr("class", "GtkMenu")
 	childIcons := hasIcon(item.Children)
 	for _, c := range item.Children {
-		addNode(submenu, c, actions, ids, childIcons)
+		addNode(submenu, c, actions, n, childIcons)
 	}
 }
 
@@ -330,7 +365,7 @@ func setMenuItemLabel(obj *etree.Element, id string, item MenuItem, withIcon boo
 	setProp(labelObj, "xalign", "0")
 	if item.Bold {
 		setProp(labelObj, "use-markup", "True")
-		setProp(labelObj, "label", "<b>"+item.Name+"</b>")
+		setProp(labelObj, "label", "<b>"+html.EscapeString(item.Name)+"</b>")
 	} else {
 		setProp(labelObj, "label", item.Name)
 	}

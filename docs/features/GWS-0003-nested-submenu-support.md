@@ -9,10 +9,10 @@ nested `GtkMenu` submenu instead of a clickable action.
 
 ## Implementation
 
-`generator.go` `addNode(parent, item, actions)`:
-- Always creates a `GtkMenuItem` with `id` set to `item.Name`.
+`generator.go` `addNode(parent, item, actions, n, withIcon)`:
+- Always creates a `GtkMenuItem` with a unique `id` (`item<N>`, see GWS-0023).
 - If `item.Children` is empty, the item is a leaf: its label is `item.Name`
-  and `actions[item.Name] = item.Action` is recorded for `menu-actions`
+  and `actions[id] = item.Action` is recorded for `menu-actions`
   (GWS-0001).
 - If `item.Children` is non-empty, the item is a submenu:
   - Its label is `item.Name`, unchanged from a leaf item.
@@ -45,7 +45,7 @@ nested `GtkMenu` submenu instead of a clickable action.
   `GtkMenuItem` contains a `child[type=submenu]` > `GtkMenu`, and that the
   item itself is not added to `actions`.
 - `addNode()` with a leaf item: assert no submenu element is created and
-  `actions[item.Name] == item.Action`.
+  `actions[id] == item.Action`.
 - `addNode()` with two levels of nesting: assert both levels produce nested
   `GtkMenu` elements and only leaf items appear in `actions`.
 

@@ -22,21 +22,27 @@ live-reload path (see GWS-0005) without restarting the sidecar.
   `$HOME`.
 - `parseSchedule(j Job) (schedule, error)`: validates exactly one of `every`
   or `schedule` is set; parses `every` with `time.ParseDuration` into
-  `intervalSchedule{d}`; parses `schedule` with `cron.ParseStandard` from
+  `intervalSchedule{d}` (`d` must be > 0); parses `schedule` with `cron.ParseStandard` from
   `github.com/robfig/cron/v3`. Returns an error if neither or both are set.
 - `runJob(ctx context.Context, j Job, s schedule)`: computes
-  `s.Next(jobNow())`, waits via `time.NewTimer`, then calls `jobExec(j.Command)`
-  on each tick. Non-zero exit or error is logged at warn. If `j.Output` is
-  set, trimmed stdout is written to `expandHome(j.Output)` (parent dir created
-  with `os.MkdirAll`). Observes `ctx.Done()` while waiting and after each run
-  to exit cleanly.
+  `s.Next(jobNow())`, waits `next.Sub(jobNow())` via `time.NewTimer`, then
+  calls `runOnce(ctx, j)` on each tick. Observes `ctx.Done()` while waiting
+  and after each run to exit cleanly.
+- `runOnce(ctx, j)`: calls `jobExec(ctx, j.Command)`. On error, logs one warn
+  including the command's trimmed stderr (when available) and leaves the
+  output file untouched. On success, if `j.Output` is set, trimmed stdout is
+  written to `expandHome(j.Output)` with `writeFileAtomic` (GWS-0018).
 - `type jobRunner struct{ mu sync.Mutex; cancel context.CancelFunc; wg sync.WaitGroup }`:
   `restart(jobs []Job)` is guarded by `mu` (called from both startup and the
-  watcher reload goroutine — data-race safe). It cancels the old context,
-  drains in-flight runs with `wg.Wait()`, then starts fresh goroutines for
-  all valid jobs.
+  watcher reload goroutine — data-race safe). It is a no-op when `jobs`
+  equals the previously started list, so unrelated reloads don't reset
+  schedules. Otherwise it cancels the old context, drains in-flight runs with
+  `wg.Wait()`, then starts fresh goroutines for all valid jobs.
 - Overridable vars for testing (mirror `sendNotification` in `notify.go`):
-  `var jobExec = func(command string) ([]byte, error)` and
+  `var jobExec = func(ctx context.Context, command string) ([]byte, error)`
+  (runs `sh -c` in its own process group via `exec.CommandContext`; on cancel
+  the whole group is SIGKILLed, `WaitDelay` 1s, so a hung job cannot block
+  `restart`) and
   `var jobNow = time.Now`.
 - Package-level `var jobs jobRunner`.
 
@@ -61,6 +67,7 @@ jobs:
 ```
 
 Rules:
+- `every` must be a positive duration.
 - Exactly one of `every` / `schedule` per job; both or neither is an error
   (job is logged and skipped, others continue).
 - `name` and `command` are required.
@@ -83,13 +90,17 @@ Rules:
 
 ### Unit Testing
 
-- `parseSchedule`: valid interval, valid cron, both set → error, neither →
+- `parseSchedule`: zero or negative `every` → error, valid interval, valid cron, both set → error, neither →
   error, bad duration string → error, bad cron expression → error.
 - `intervalSchedule.Next`: returns `t + d`.
 - `runJob`: stub `jobNow` + `jobExec`; assert command called on tick; assert
   `ctx` cancel stops the loop with no further calls; assert output file
-  written with trimmed stdout when `j.Output` is set.
-- `jobRunner.restart`: restarting stops the previous set (no further calls
+  written with trimmed stdout when `j.Output` is set; assert a failing
+  command leaves the existing output file unchanged.
+- `jobExec`: a long-running command (`sleep 10`) is killed promptly when its
+  context is cancelled.
+- `jobRunner.restart`: restarting with an identical list does not restart
+  running jobs; restarting with a changed list stops the previous set (no further calls
   from old goroutines); new jobs run on new schedule.
 - `config.go` `parseConfig` with a `jobs:` fixture: fields parsed correctly.
 - `expandHome`: leading `~` replaced with `$HOME`; non-`~` path unchanged.

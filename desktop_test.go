@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -128,11 +129,71 @@ func TestStripFieldCodes(t *testing.T) {
 		"app %i --name %c": "app --name",
 		"plain command":    "plain command",
 		"app %k":           "app",
+		"echo %%f":         "echo %f",
 	}
 	for input, want := range cases {
 		if got := stripFieldCodes(input); got != want {
 			t.Errorf("stripFieldCodes(%q) = %q, want %q", input, got, want)
 		}
+	}
+}
+
+func TestParseDesktopEntry_VisibilityKeys(t *testing.T) {
+	b := []byte("[Desktop Entry]\nType=Application\nName=A\nExec=a\nTerminal=true\n" +
+		"OnlyShowIn=GNOME;KDE;\nNotShowIn=XFCE;\nTryExec=a-bin\n")
+	e, ok := parseDesktopEntry(b)
+	if !ok {
+		t.Fatal("ok = false, want true")
+	}
+	if !e.terminal || e.tryExec != "a-bin" ||
+		!slices.Equal(e.onlyShowIn, []string{"GNOME", "KDE"}) || !slices.Equal(e.notShowIn, []string{"XFCE"}) {
+		t.Errorf("unexpected entry: %+v", e)
+	}
+}
+
+func TestEntryVisible(t *testing.T) {
+	cases := []struct {
+		name     string
+		e        desktopEntry
+		desktops []string
+		want     bool
+	}{
+		{"no restrictions", desktopEntry{}, []string{"sway"}, true},
+		{"only show in match", desktopEntry{onlyShowIn: []string{"GNOME", "sway"}}, []string{"sway"}, true},
+		{"only show in no match", desktopEntry{onlyShowIn: []string{"GNOME"}}, []string{"sway"}, false},
+		{"only show in unknown desktop", desktopEntry{onlyShowIn: []string{"GNOME"}}, nil, false},
+		{"not show in match", desktopEntry{notShowIn: []string{"sway"}}, []string{"sway"}, false},
+		{"not show in no match", desktopEntry{notShowIn: []string{"GNOME"}}, []string{"sway"}, true},
+		{"try exec missing", desktopEntry{tryExec: "definitely-not-installed-xyz"}, nil, false},
+		{"try exec present", desktopEntry{tryExec: "sh"}, nil, true},
+	}
+	for _, c := range cases {
+		if got := entryVisible(c.e, c.desktops); got != c.want {
+			t.Errorf("%s: entryVisible = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestScanApplications_TerminalSortAndVisibility(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", home)
+	t.Setenv("XDG_DATA_DIRS", "")
+	t.Setenv("XDG_CURRENT_DESKTOP", "sway")
+	apps := filepath.Join(home, "applications")
+
+	writeDesktopFile(t, apps, "zoom.desktop", "[Desktop Entry]\nType=Application\nName=Zoom\nExec=zoom\n")
+	writeDesktopFile(t, apps, "gimp.desktop", "[Desktop Entry]\nType=Application\nName=gimp\nExec=gimp %U\n")
+	writeDesktopFile(t, apps, "htop.desktop", "[Desktop Entry]\nType=Application\nName=Htop\nExec=htop\nTerminal=true\n")
+	writeDesktopFile(t, apps, "gnome.desktop", "[Desktop Entry]\nType=Application\nName=GnomeOnly\nExec=g\nOnlyShowIn=GNOME;\n")
+
+	items := scanApplications()
+	var got []string
+	for _, it := range items {
+		got = append(got, it.Name+"="+it.Action)
+	}
+	want := []string{"gimp=gimp", "Htop=xdg-terminal-exec htop", "Zoom=zoom"}
+	if !slices.Equal(got, want) {
+		t.Errorf("items = %v, want %v", got, want)
 	}
 }
 

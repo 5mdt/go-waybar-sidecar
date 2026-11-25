@@ -286,7 +286,7 @@ func ensureSettings(path string) error {
 		return fmt.Errorf("backup config before settings fill: %w", err)
 	}
 
-	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+	if err := writeFileAtomic(path, buf.Bytes()); err != nil {
 		return fmt.Errorf("write settings: %w", err)
 	}
 

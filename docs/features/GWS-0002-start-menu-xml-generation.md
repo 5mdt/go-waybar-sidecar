@@ -49,7 +49,7 @@ The sidecar renders one GTK `GtkMenu` XML document per menu-bearing module
 
 - `buildXML()` with a single leaf item `{name: "Terminal", action: "foot"}`:
   assert the output XML contains a `GtkMenuItem` with label `Terminal` and
-  `menuActions["Terminal"] == "foot"`.
+  `menuActions["item1"] == "foot"`.
 - `buildXML()` with an empty `cfg.StartMenu`: assert the output XML contains
   an empty `GtkMenu` and an empty `menuActions` map.
 

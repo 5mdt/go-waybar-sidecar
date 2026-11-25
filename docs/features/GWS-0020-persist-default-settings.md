@@ -33,9 +33,9 @@ Rules:
   4. For each descriptor not already present in the sidecar map, append a key
      scalar + value scalar.
   5. If nothing was added, return nil (idempotent).
-  6. If keys were added: call `backupFile(path)` (reuses `generator.go:161`),
-     then write the re-encoded YAML (`yaml.NewEncoder` with `SetIndent(2)`) to
-     `path`.
+  6. If keys were added: call `backupFile(path)` (copies to `path.bak`), then
+     `writeFileAtomic` the re-encoded YAML (`yaml.NewEncoder` with
+     `SetIndent(2)`) to `path`.
 
 `main.go` (`run()`):
 - Call `ensureSettings(configPath)` immediately after `ensureConfig()` (inside

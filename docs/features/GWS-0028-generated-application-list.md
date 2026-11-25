@@ -22,14 +22,22 @@ refreshes the menu without a sidecar restart.
   over the `[Desktop Entry]` group only (other groups, e.g.
   `[Desktop Action ...]`, and localized keys like `Name[de]` are ignored).
   Returns `ok=false` when `NoDisplay=true`, `Hidden=true`, `Type` is not
-  `Application`, or `Name`/`Exec` is missing.
+  `Application`, or `Name`/`Exec` is missing. Also records `Terminal`,
+  `OnlyShowIn`, `NotShowIn` and `TryExec`.
+- `entryVisible(e desktopEntry, desktops []string) bool`: false when
+  `OnlyShowIn` is set and shares no value with `desktops` (the
+  `:`-separated `$XDG_CURRENT_DESKTOP`), when `NotShowIn` shares a value, or
+  when `TryExec` is set and `exec.LookPath` fails.
 - `stripFieldCodes(exec string) string`: removes Exec field codes (`%f %u %F
-  %U %i %c %k %d %D %n %N %v %m`) and unescapes `%%` to `%`.
+  %U %i %c %k %d %D %n %N %v %m`) and unescapes `%%` to `%` (a `%%` is never read as the start of a field code,
+  so `%%f` yields `%f`).
 - `scanApplications() []MenuItem` (package-level `var`, indirection for
   tests): walks `appDirs()` recursively for `*.desktop` files, parses each,
   dedupes by desktop file id (path relative to its app dir with `/` replaced
-  by `-`) keeping the first directory in precedence order, and returns
-  `MenuItem{Name: ..., Action: ...}` sorted alphabetically by name.
+  by `-`) keeping the first directory in precedence order, skips entries
+  failing `entryVisible`, and returns `MenuItem{Name: ..., Action: ...}`
+  sorted alphabetically by name, case-insensitively. `Terminal=true`
+  entries get the action `xdg-terminal-exec <cmd>`.
 
 `config.go` — wiring into menus:
 - `MenuItem.Include string` (`yaml:"include"`): when set, the item is
@@ -94,8 +102,12 @@ Rules:
 - `parseDesktopEntry`: extracts `Name`/`Exec`; skips `NoDisplay=true`,
   `Hidden=true`, `Type` != `Application`, missing `Name` or `Exec`; ignores
   keys outside `[Desktop Entry]` and localized `Name[xx]`.
-- `stripFieldCodes`: `%U`, `%f`, `%%`, and codes mid-string are handled.
-- `scanApplications`: results sorted by name; duplicate desktop file id
+- `parseDesktopEntry`: reads `Terminal`, `OnlyShowIn`, `NotShowIn`, `TryExec`.
+- `entryVisible`: `OnlyShowIn` match/no match, `NotShowIn` match, `TryExec`
+  missing binary hides, `TryExec=sh` keeps.
+- `stripFieldCodes`: `%U`, `%f`, `%%`, `%%f`, and codes mid-string are handled.
+- `scanApplications`: results sorted by name, case-insensitively; a
+  `Terminal=true` entry's action is prefixed with `xdg-terminal-exec `; duplicate desktop file id
   across two dirs keeps the higher-precedence one; entries in subdirectories
   are found; a missing app dir is silently skipped.
 - `expandIncludes`: splices at top level, inside `children`, and inside a

@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -39,6 +41,47 @@ type desktopEntry struct {
 	exec       string
 	icon       string
 	categories []string
+	terminal   bool
+	onlyShowIn []string
+	notShowIn  []string
+	tryExec    string
+}
+
+// splitList splits a ;-separated desktop entry list, dropping empty items.
+func splitList(value string) []string {
+	var out []string
+	for _, v := range strings.Split(value, ";") {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// entryVisible reports whether e should be listed for the given
+// (XDG_CURRENT_DESKTOP) desktops: OnlyShowIn must match, NotShowIn must not,
+// and TryExec, if set, must be found.
+func entryVisible(e desktopEntry, desktops []string) bool {
+	has := func(list []string) bool {
+		for _, d := range desktops {
+			if slices.Contains(list, d) {
+				return true
+			}
+		}
+		return false
+	}
+	if len(e.onlyShowIn) > 0 && !has(e.onlyShowIn) {
+		return false
+	}
+	if has(e.notShowIn) {
+		return false
+	}
+	if e.tryExec != "" {
+		if _, err := exec.LookPath(e.tryExec); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // parseDesktopEntry reads the [Desktop Entry] group from b. It returns
@@ -82,11 +125,15 @@ func parseDesktopEntry(b []byte) (desktopEntry, bool) {
 		case "Icon":
 			e.icon = value
 		case "Categories":
-			for _, c := range strings.Split(value, ";") {
-				if c = strings.TrimSpace(c); c != "" {
-					e.categories = append(e.categories, c)
-				}
-			}
+			e.categories = splitList(value)
+		case "Terminal":
+			e.terminal = value == "true"
+		case "OnlyShowIn":
+			e.onlyShowIn = splitList(value)
+		case "NotShowIn":
+			e.notShowIn = splitList(value)
+		case "TryExec":
+			e.tryExec = value
 		case "Type":
 			typ = value
 		case "NoDisplay":
@@ -109,10 +156,12 @@ var fieldCodes = []string{"%f", "%F", "%u", "%U", "%d", "%D", "%n", "%N", "%i", 
 
 // stripFieldCodes removes Exec field codes and unescapes %% to %.
 func stripFieldCodes(exec string) string {
+	const escaped = "\x00"
+	exec = strings.ReplaceAll(exec, "%%", escaped)
 	for _, code := range fieldCodes {
 		exec = strings.ReplaceAll(exec, code, "")
 	}
-	exec = strings.ReplaceAll(exec, "%%", "%")
+	exec = strings.ReplaceAll(exec, escaped, "%")
 	return strings.Join(strings.Fields(exec), " ")
 }
 
@@ -123,6 +172,7 @@ func stripFieldCodes(exec string) string {
 var scanApplications = func() []MenuItem {
 	seen := map[string]bool{}
 	var items []MenuItem
+	desktops := strings.FieldsFunc(os.Getenv("XDG_CURRENT_DESKTOP"), func(r rune) bool { return r == ':' })
 
 	for _, dir := range appDirs() {
 		entries, err := desktopFilesIn(dir)
@@ -136,19 +186,25 @@ var scanApplications = func() []MenuItem {
 			seen[id] = true
 
 			entry, ok := parseDesktopEntry(b)
-			if !ok {
+			if !ok || !entryVisible(entry, desktops) {
 				continue
+			}
+			action := stripFieldCodes(entry.exec)
+			if entry.terminal {
+				action = "xdg-terminal-exec " + action
 			}
 			items = append(items, MenuItem{
 				Name:       entry.name,
-				Action:     stripFieldCodes(entry.exec),
+				Action:     action,
 				Icon:       entry.icon,
 				Categories: entry.categories,
 			})
 		}
 	}
 
-	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
+	sort.SliceStable(items, func(i, j int) bool {
+		return strings.ToLower(items[i].Name) < strings.ToLower(items[j].Name)
+	})
 	return items
 }
 

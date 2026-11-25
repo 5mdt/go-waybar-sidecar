@@ -2,21 +2,28 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/robfig/cron/v3"
 )
 
-// jobExec runs a shell command and returns its combined stdout.
-// Overridable for testing (mirrors sendNotification in notify.go).
-var jobExec = func(command string) ([]byte, error) {
-	return exec.Command("sh", "-c", command).Output()
+// jobExec runs a shell command and returns its stdout. The command runs in its
+// own process group; cancelling ctx SIGKILLs the whole group so a hung job
+// cannot block a restart. Overridable for testing (mirrors sendNotification
+// in notify.go).
+var jobExec = func(ctx context.Context, command string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = time.Second
+	return cmd.Output()
 }
 
 // jobNow returns the current time. Overridable for testing.
@@ -48,6 +55,9 @@ func parseSchedule(j Job) (schedule, error) {
 		if err != nil {
 			return nil, fmt.Errorf("job %q: invalid 'every' value %q: %w", j.Name, j.Every, err)
 		}
+		if d <= 0 {
+			return nil, fmt.Errorf("job %q: 'every' must be positive, got %q", j.Name, j.Every)
+		}
 		return intervalSchedule{d: d}, nil
 	default:
 		s, err := cron.ParseStandard(j.Schedule)
@@ -63,12 +73,7 @@ func parseSchedule(j Job) (schedule, error) {
 // previous run finishes.
 func runJob(ctx context.Context, j Job, s schedule) {
 	for {
-		next := s.Next(jobNow())
-		delay := time.Until(next)
-		if delay < 0 {
-			delay = 0
-		}
-		timer := time.NewTimer(delay)
+		timer := time.NewTimer(max(0, s.Next(jobNow()).Sub(jobNow())))
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -76,31 +81,43 @@ func runJob(ctx context.Context, j Job, s schedule) {
 		case <-timer.C:
 		}
 
-		out, err := jobExec(j.Command)
-		outPath := expandHome(j.Output)
-		if err != nil {
-			if j.Output != "" {
-				logger.Warn("job failed", "name", j.Name, "err", err, notifyOpen("Show output", outPath))
-			} else {
-				logger.Warn("job failed", "name", j.Name, "err", err)
-			}
-		} else {
-			logger.Debug("job ran", "name", j.Name)
-		}
+		runOnce(ctx, j)
 
-		if j.Output != "" {
-			if mkErr := os.MkdirAll(filepath.Dir(outPath), 0o755); mkErr != nil {
-				logger.Warn("job output: cannot create dir", "name", j.Name, "err", mkErr)
-			} else if wErr := os.WriteFile(outPath, []byte(strings.TrimRight(string(out), "\n")), 0o644); wErr != nil {
-				logger.Warn("job output: cannot write file", "name", j.Name, "err", wErr)
-			}
-		}
-
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			return
-		default:
 		}
+	}
+}
+
+// runOnce executes j once. On failure it logs the error (with stderr) and
+// leaves the output file untouched; on success it writes trimmed stdout to
+// j.Output atomically.
+func runOnce(ctx context.Context, j Job) {
+	outPath := expandHome(j.Output)
+	out, err := jobExec(ctx, j.Command)
+	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		attrs := []any{"name", j.Name, "err", err}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			attrs = append(attrs, "stderr", strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		if j.Output != "" {
+			attrs = append(attrs, notifyOpen("Show output", outPath))
+		}
+		logger.Warn("job failed", attrs...)
+		return
+	}
+	logger.Debug("job ran", "name", j.Name)
+
+	if j.Output == "" {
+		return
+	}
+	data := []byte(strings.TrimRight(string(out), "\n"))
+	if err := writeFileAtomic(outPath, data); err != nil {
+		logger.Warn("job output: cannot write file", "name", j.Name, "err", err)
 	}
 }
 
@@ -108,16 +125,24 @@ func runJob(ctx context.Context, j Job, s schedule) {
 // restart is safe to call concurrently (called from both run() and the
 // watcher reload goroutine).
 type jobRunner struct {
-	mu     sync.Mutex
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
+	current []Job
 }
 
 // restart stops the current job set (draining in-flight runs) and starts
-// fresh goroutines for jobs. Invalid jobs are logged and skipped.
+// fresh goroutines for jobs. Invalid jobs are logged and skipped. It does
+// nothing when jobs equals the running set, so unrelated reloads don't reset
+// schedules.
 func (jr *jobRunner) restart(jobs []Job) {
 	jr.mu.Lock()
 	defer jr.mu.Unlock()
+
+	if jr.cancel != nil && slices.Equal(jr.current, jobs) {
+		return
+	}
+	jr.current = slices.Clone(jobs)
 
 	// Cancel and drain the previous set.
 	if jr.cancel != nil {

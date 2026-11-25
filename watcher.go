@@ -19,7 +19,16 @@ func watch(cfg *Config) {
 	defer w.Close()
 
 	watchPaths := append([]string{gwsDir, waybarDir}, appDirs()...)
+	pending := map[string]bool{}
 	for _, p := range watchPaths {
+		if _, err := os.Stat(p); err != nil {
+			pending[p] = true
+			// Non-recursive: only the ancestor's own children matter.
+			if err := w.Add(nearestExisting(p)); err != nil {
+				logger.Debug("failed to watch ancestor of missing path", "path", p, "err", err)
+			}
+			continue
+		}
 		addWatch(w, p)
 	}
 
@@ -59,6 +68,10 @@ func watch(cfg *Config) {
 			if !isRelevantOp(e.Op) {
 				continue
 			}
+			if handleCreate(w, e, watchPaths, pending) {
+				logger.Info("app directory appeared", "dir", e.Name)
+				scheduleReload()
+			}
 			if !acceptEvent(e.Name, targets) {
 				continue
 			}
@@ -72,10 +85,17 @@ func watch(cfg *Config) {
 	}
 }
 
+// reloadCfgMu serializes reload() so overlapping debounce callbacks never
+// race on *cfg.
+var reloadCfgMu sync.Mutex
+
 // reload loads the latest config and regenerates outputs. If loading fails
 // (e.g. invalid YAML), the previous *cfg is kept and generation runs against
 // it instead of exiting (see GWS-0017).
 func reload(cfg *Config) {
+	reloadCfgMu.Lock()
+	defer reloadCfgMu.Unlock()
+
 	if !noGenerate {
 		newCfg, err := loadConfig()
 		if err != nil {
@@ -86,6 +106,67 @@ func reload(cfg *Config) {
 	}
 	generate(*cfg)
 	jobs.restart(cfg.Jobs)
+}
+
+// nearestExisting returns p, or its closest existing ancestor.
+func nearestExisting(p string) string {
+	for {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+		parent := filepath.Dir(p)
+		if parent == p {
+			return p
+		}
+		p = parent
+	}
+}
+
+func under(name, root string) bool {
+	return name == root || strings.HasPrefix(name, root+string(filepath.Separator))
+}
+
+// handleCreate starts watching a directory created after startup: one under
+// a watched root, the root itself once it appears, or an ancestor of a still
+// missing root (so the next level's creation is seen too). It reports whether
+// the directory is an app dir (or under one), so the caller can reload and
+// list apps already inside it.
+func handleCreate(w *fsnotify.Watcher, e fsnotify.Event, roots []string, pending map[string]bool) bool {
+	if e.Op&fsnotify.Create == 0 {
+		return false
+	}
+	if info, err := os.Stat(e.Name); err != nil || !info.IsDir() {
+		return false
+	}
+
+	watched := false
+	for root := range pending {
+		switch {
+		case root == e.Name:
+			delete(pending, root)
+			watched = true
+		case under(root, e.Name):
+			if err := w.Add(e.Name); err != nil {
+				logger.Warn("failed to watch dir", "path", e.Name, "err", err)
+			}
+		}
+	}
+	for _, root := range roots {
+		if under(e.Name, root) {
+			watched = true
+		}
+	}
+	if !watched {
+		return false
+	}
+	addWatch(w, e.Name)
+
+	for _, dir := range appDirs() {
+		if under(e.Name, dir) {
+			return true
+		}
+	}
+	return false
 }
 
 func addWatch(w *fsnotify.Watcher, p string) {
@@ -175,7 +256,10 @@ func isWatchedFile(name string) bool {
 			return ext == ".desktop"
 		}
 	}
-	return ext == ".json" || ext == ".jsonc" || ext == ".css"
+	if strings.HasPrefix(name, waybarDir+string(filepath.Separator)) {
+		return ext == ".json" || ext == ".jsonc" || ext == ".css"
+	}
+	return false
 }
 
 // symlinkTargets scans the given directories (non-recursively) for whitelisted

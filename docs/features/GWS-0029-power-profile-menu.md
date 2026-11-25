@@ -116,7 +116,7 @@ Rules:
   `ActiveProfile` in the invalidated-properties list -> `true`; a different
   interface name -> `false`.
 - `setMenuItemLabel`: bold renders a child `GtkLabel` with `use-markup=True`
-  and `<b>label</b>` text, no `label` property on the `GtkMenuItem` itself;
+  and `<b>label</b>` text (label escaped with `html.EscapeString`), no `label` property on the `GtkMenuItem` itself;
   non-bold renders the existing plain `label` property, unchanged from
   before this feature.
 - `resolveInclude("power-profiles:plain")`: resolves via a stubbed

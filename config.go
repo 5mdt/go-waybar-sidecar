@@ -22,6 +22,12 @@ type MenuItem struct {
 	// Include, when set, replaces this item in place with a generated list of
 	// items (see expandIncludes). Name/Action/Children are ignored.
 	Include string `yaml:"include"`
+	// Mode selects category placement for applications:categories:
+	// "all" (default) or "first" (GWS-0031). Ignored by other aliases.
+	Mode string `yaml:"mode"`
+	// Categories are the .desktop Categories= values. Set only by
+	// scanApplications, never by user config.
+	Categories []string `yaml:"-"`
 	// Bold renders the item's label with Pango markup instead of the plain
 	// GtkMenuItem label (see addNode). Set only by generators such as
 	// buildPowerProfileItems, never by user config.
@@ -402,7 +408,7 @@ func expandIncludes(items []MenuItem) []MenuItem {
 	expanded := make([]MenuItem, 0, len(items))
 	for _, item := range items {
 		if item.Include != "" {
-			resolved, ok := resolveInclude(item.Include)
+			resolved, ok := resolveInclude(item)
 			if !ok {
 				logger.Warn("unknown include alias, dropping item", "include", item.Include)
 				continue
@@ -418,10 +424,12 @@ func expandIncludes(items []MenuItem) []MenuItem {
 }
 
 // resolveInclude resolves a single include alias to its generated items.
-func resolveInclude(alias string) ([]MenuItem, bool) {
-	switch alias {
+func resolveInclude(item MenuItem) ([]MenuItem, bool) {
+	switch item.Include {
 	case "applications:plain":
 		return scanApplications(), true
+	case "applications:categories":
+		return categorizeApps(scanApplications(), item.Mode), true
 	case "power-profiles:plain":
 		return scanPowerProfiles(), true
 	case "session-actions:plain":

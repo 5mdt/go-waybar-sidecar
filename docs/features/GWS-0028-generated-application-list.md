@@ -68,9 +68,8 @@ Rules:
   (siblings keep their order).
 - An unknown `include` alias is dropped with a warning; the rest of the menu
   still generates.
-- The alias is namespaced (`applications:<shape>`) to leave room for a future
-  `applications:categories` (per-category submenu tree) without changing this
-  syntax — see `docs/todo.md`.
+- The alias is namespaced (`applications:<shape>`); the per-category variant
+  is GWS-0031.
 
 ## Testing
 

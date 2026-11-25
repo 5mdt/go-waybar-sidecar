@@ -25,6 +25,7 @@ waybar:
       - name: Apps
         children:
           # - include: applications:plain   # all *.desktop apps, alphabetical
+          # - include: applications:categories   # per-category submenus; mode: all|first
           - name: Terminal
             action: "foot"
           - name: Browser

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -285,5 +286,33 @@ func TestLoadConfigMissingFile(t *testing.T) {
 
 	if _, err := loadConfig(); err == nil {
 		t.Fatal("expected error for missing config file, got nil")
+	}
+}
+
+func TestExpandIncludes_ApplicationsCategories(t *testing.T) {
+	stubScanApplications(t, []MenuItem{
+		{Name: "Browser", Categories: []string{"Network", "Utility"}},
+		{Name: "Editor", Categories: []string{"Utility", "Development"}},
+	})
+
+	got := tree(expandIncludes([]MenuItem{{Include: "applications:categories"}}))
+	want := "Development:[Editor]|Network:[Browser]|Utility:[Browser,Editor]"
+	if strings.Join(got, "|") != want {
+		t.Errorf("default = %v, want %s", got, want)
+	}
+
+	got = tree(expandIncludes([]MenuItem{{Include: "applications:categories", Mode: "first"}}))
+	want = "Network:[Browser]|Utility:[Editor]"
+	if strings.Join(got, "|") != want {
+		t.Errorf("first = %v, want %s", got, want)
+	}
+}
+
+func TestExpandIncludes_ApplicationsCategoriesInvalidMode(t *testing.T) {
+	stubScanApplications(t, []MenuItem{{Name: "Editor", Categories: []string{"Utility", "Development"}}})
+
+	got := tree(expandIncludes([]MenuItem{{Include: "applications:categories", Mode: "bogus"}}))
+	if len(got) != 2 || got[0] != "Development:[Editor]" || got[1] != "Utility:[Editor]" {
+		t.Errorf("invalid mode = %v, want all behaviour", got)
 	}
 }

@@ -32,16 +32,17 @@
 - [GWS-0028. Generated application list](features/GWS-0028-generated-application-list.md) - `#menu` `#config-generation` `#filesystem`
 - [GWS-0029. Power profile menu](features/GWS-0029-power-profile-menu.md) - `#menu` `#config-generation` `#power`
 - [GWS-0030. Session actions menu](features/GWS-0030-session-actions-menu.md) - `#menu` `#config-generation` `#power`
+- [GWS-0031. Categorized application list](features/GWS-0031-categorized-application-list.md) - `#menu` `#config-generation` `#filesystem`
 
 ## Tags
 
 - `#config`: GWS-0004, GWS-0005, GWS-0014, GWS-0017, GWS-0018, GWS-0019, GWS-0020, GWS-0021, GWS-0025
-- `#config-generation`: GWS-0001, GWS-0002, GWS-0004, GWS-0015, GWS-0016, GWS-0018, GWS-0023, GWS-0024, GWS-0028, GWS-0029, GWS-0030
-- `#menu`: GWS-0002, GWS-0003, GWS-0015, GWS-0023, GWS-0024, GWS-0028, GWS-0029, GWS-0030
+- `#config-generation`: GWS-0001, GWS-0002, GWS-0004, GWS-0015, GWS-0016, GWS-0018, GWS-0023, GWS-0024, GWS-0028, GWS-0029, GWS-0030, GWS-0031
+- `#menu`: GWS-0002, GWS-0003, GWS-0015, GWS-0023, GWS-0024, GWS-0028, GWS-0029, GWS-0030, GWS-0031
 - `#reload`: GWS-0005, GWS-0006, GWS-0007, GWS-0016, GWS-0017, GWS-0022, GWS-0027
 - `#process-lifecycle`: GWS-0006, GWS-0007, GWS-0008, GWS-0009, GWS-0010, GWS-0012, GWS-0017, GWS-0022, GWS-0027
 - `#logging`: GWS-0011, GWS-0013, GWS-0026
 - `#cli`: GWS-0010, GWS-0011, GWS-0014, GWS-0016, GWS-0019
-- `#filesystem`: GWS-0008, GWS-0021, GWS-0028
+- `#filesystem`: GWS-0008, GWS-0021, GWS-0028, GWS-0031
 - `#jobs`: GWS-0025
 - `#power`: GWS-0029, GWS-0030

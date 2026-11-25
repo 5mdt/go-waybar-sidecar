@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -207,5 +208,102 @@ func TestScanApplications_MissingDirIgnored(t *testing.T) {
 	items := scanApplications()
 	if len(items) != 0 {
 		t.Fatalf("scanApplications() = %v, want empty for missing dirs", items)
+	}
+}
+
+func TestParseDesktopEntry_Categories(t *testing.T) {
+	b := []byte("[Desktop Entry]\nType=Application\nName=A\nExec=a\nCategories=Network;WebBrowser; GTK ;;\n")
+	e, ok := parseDesktopEntry(b)
+	if !ok {
+		t.Fatal("parseDesktopEntry() ok = false, want true")
+	}
+	want := []string{"Network", "WebBrowser", "GTK"}
+	if strings.Join(e.categories, ",") != strings.Join(want, ",") {
+		t.Errorf("categories = %v, want %v", e.categories, want)
+	}
+
+	e, _ = parseDesktopEntry([]byte("[Desktop Entry]\nType=Application\nName=A\nExec=a\n"))
+	if len(e.categories) != 0 {
+		t.Errorf("categories = %v, want none", e.categories)
+	}
+}
+
+func TestScanApplications_Categories(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", home)
+	t.Setenv("XDG_DATA_DIRS", "")
+
+	writeDesktopFile(t, filepath.Join(home, "applications"), "a.desktop",
+		"[Desktop Entry]\nType=Application\nName=A\nExec=a\nCategories=Utility;Development;\n")
+
+	items := scanApplications()
+	if len(items) != 1 || strings.Join(items[0].Categories, ",") != "Utility,Development" {
+		t.Fatalf("scanApplications() = %+v, want Categories [Utility Development]", items)
+	}
+}
+
+// tree renders submenus as "Label:[child,child]" for compact comparison.
+func tree(items []MenuItem) []string {
+	var out []string
+	for _, it := range items {
+		var names []string
+		for _, c := range it.Children {
+			names = append(names, c.Name)
+		}
+		out = append(out, it.Name+":["+strings.Join(names, ",")+"]")
+	}
+	return out
+}
+
+func TestCategorizeApps(t *testing.T) {
+	apps := []MenuItem{
+		{Name: "Browser", Categories: []string{"Network", "WebBrowser", "Utility"}},
+		{Name: "Editor", Categories: []string{"Utility", "Development"}},
+		{Name: "Player", Categories: []string{"AudioVideo", "Audio"}},
+		{Name: "Solitaire", Categories: []string{"Game"}},
+		{Name: "Widget", Categories: []string{"GTK", "Qt"}},
+		{Name: "Zip"},
+	}
+
+	allWant := []string{
+		"Audio & Video:[Player]",
+		"Development:[Editor]",
+		"Games:[Solitaire]",
+		"Network:[Browser]",
+		"Utility:[Browser,Editor]",
+		"Other:[Widget,Zip]",
+	}
+
+	tests := []struct {
+		name string
+		mode string
+		want []string
+	}{
+		{"first", "first", []string{
+			"Audio & Video:[Player]",
+			"Games:[Solitaire]",
+			"Network:[Browser]",
+			"Utility:[Editor]",
+			"Other:[Widget,Zip]",
+		}},
+		{"all", "all", allWant},
+		{"default is all", "", allWant},
+		{"invalid falls back to all", "bogus", allWant},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tree(categorizeApps(apps, tt.mode))
+			if strings.Join(got, "|") != strings.Join(tt.want, "|") {
+				t.Errorf("categorizeApps() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCategorizeApps_NoOther(t *testing.T) {
+	got := tree(categorizeApps([]MenuItem{{Name: "Editor", Categories: []string{"Development"}}}, "first"))
+	if len(got) != 1 || got[0] != "Development:[Editor]" {
+		t.Errorf("categorizeApps() = %v, want only Development", got)
 	}
 }

@@ -35,8 +35,9 @@ func appDirs() []string {
 
 // desktopEntry is the subset of a [Desktop Entry] group needed for a menu item.
 type desktopEntry struct {
-	name string
-	exec string
+	name       string
+	exec       string
+	categories []string
 }
 
 // parseDesktopEntry reads the [Desktop Entry] group from b. It returns
@@ -77,6 +78,12 @@ func parseDesktopEntry(b []byte) (desktopEntry, bool) {
 			e.name = value
 		case "Exec":
 			e.exec = value
+		case "Categories":
+			for _, c := range strings.Split(value, ";") {
+				if c = strings.TrimSpace(c); c != "" {
+					e.categories = append(e.categories, c)
+				}
+			}
 		case "Type":
 			typ = value
 		case "NoDisplay":
@@ -130,8 +137,9 @@ var scanApplications = func() []MenuItem {
 				continue
 			}
 			items = append(items, MenuItem{
-				Name:   entry.name,
-				Action: stripFieldCodes(entry.exec),
+				Name:       entry.name,
+				Action:     stripFieldCodes(entry.exec),
+				Categories: entry.categories,
 			})
 		}
 	}
@@ -166,4 +174,65 @@ func desktopFilesIn(dir string) (map[string][]byte, error) {
 		return nil
 	})
 	return files, err
+}
+
+// mainCategories maps freedesktop main category keys to menu labels.
+var mainCategories = map[string]string{
+	"AudioVideo":  "Audio & Video",
+	"Development": "Development",
+	"Education":   "Education",
+	"Game":        "Games",
+	"Graphics":    "Graphics",
+	"Network":     "Network",
+	"Office":      "Office",
+	"Science":     "Science",
+	"Settings":    "Settings",
+	"System":      "System",
+	"Utility":     "Utility",
+}
+
+const otherCategory = "Other"
+
+// categorizeApps groups apps (assumed name-sorted) into one submenu per
+// non-empty main category, sorted by label with "Other" last. mode "first"
+// places an app in the first main category it lists; anything else ("all",
+// "", unknown with a warning) places it in every one. Apps with no main
+// category go to "Other". See GWS-0031.
+func categorizeApps(apps []MenuItem, mode string) []MenuItem {
+	if mode != "" && mode != "first" && mode != "all" {
+		logger.Warn("unknown include mode, using all", "mode", mode)
+	}
+
+	buckets := map[string][]MenuItem{}
+	for _, app := range apps {
+		var labels []string
+		for _, c := range app.Categories {
+			if label, ok := mainCategories[c]; ok {
+				labels = append(labels, label)
+			}
+		}
+		switch {
+		case len(labels) == 0:
+			labels = []string{otherCategory}
+		case mode == "first":
+			labels = labels[:1]
+		}
+
+		app.Categories = nil
+		for _, label := range labels {
+			buckets[label] = append(buckets[label], app)
+		}
+	}
+
+	var menus []MenuItem
+	for label, children := range buckets {
+		menus = append(menus, MenuItem{Name: label, Children: children})
+	}
+	sort.Slice(menus, func(i, j int) bool {
+		if (menus[i].Name == otherCategory) != (menus[j].Name == otherCategory) {
+			return menus[j].Name == otherCategory
+		}
+		return menus[i].Name < menus[j].Name
+	})
+	return menus
 }

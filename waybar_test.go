@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -271,6 +272,9 @@ func TestReloadWaybarStartsWhenNotRunning(t *testing.T) {
 	if !strings.Contains(log, "waybar started") {
 		t.Errorf("expected \"waybar started\" in log, got:\n%s", log)
 	}
+	if !strings.Contains(log, `level=INFO msg="waybar not running, performing cold start"`) {
+		t.Errorf("expected info-level cold start log, got:\n%s", log)
+	}
 	if strings.Contains(log, "failed to start") {
 		t.Errorf("unexpected failure in log:\n%s", log)
 	}
@@ -315,6 +319,9 @@ func TestReloadWaybarFallsBackWhenUsr2Kills(t *testing.T) {
 	log := buf.String()
 	if !strings.Contains(log, "waybar died after reload, falling back to cold start") {
 		t.Errorf("expected fallback log, got:\n%s", log)
+	}
+	if strings.Contains(log, "waybar not running") {
+		t.Errorf("waybar was running; unexpected \"not running\" log:\n%s", log)
 	}
 	if !waybar.alive() {
 		t.Error("expected a fresh waybar to be alive after fallback cold start")
@@ -384,8 +391,11 @@ func TestSweepStrayWaybarsKillsAll(t *testing.T) {
 	var mu sync.Mutex
 	killFn = func(pid int, sig syscall.Signal) error {
 		mu.Lock()
+		defer mu.Unlock()
+		if sig == 0 {
+			return syscall.ESRCH // gone right after SIGTERM
+		}
 		killed[pid] = sig
-		mu.Unlock()
 		return nil
 	}
 
@@ -396,8 +406,34 @@ func TestSweepStrayWaybarsKillsAll(t *testing.T) {
 			t.Errorf("expected SIGTERM to pid %d, got %v", pid, killed[pid])
 		}
 	}
-	if !strings.Contains(buf.String(), "killed stray waybar instance") {
+	if !strings.Contains(buf.String(), "terminating process") {
 		t.Errorf("expected log line, got: %s", buf.String())
+	}
+}
+
+func TestSweepStrayWaybarsEscalatesToSIGKILL(t *testing.T) {
+	setupWaybarTest(t)
+	origGrace, origPoll := sidecarStopGrace, sidecarStopPoll
+	sidecarStopGrace, sidecarStopPoll = 20*time.Millisecond, 5*time.Millisecond
+	t.Cleanup(func() { sidecarStopGrace, sidecarStopPoll = origGrace, origPoll })
+
+	waybarPIDsFn = func() []int { return []int{100} }
+
+	var mu sync.Mutex
+	var sigs []syscall.Signal
+	killFn = func(pid int, sig syscall.Signal) error {
+		mu.Lock()
+		defer mu.Unlock()
+		sigs = append(sigs, sig)
+		return nil // never exits
+	}
+
+	sweepStrayWaybars()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Contains(sigs, syscall.SIGKILL) {
+		t.Errorf("expected SIGKILL escalation, got %v", sigs)
 	}
 }
 

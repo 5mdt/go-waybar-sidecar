@@ -17,14 +17,11 @@ only ever the one it started.
 ## Implementation
 
 `waybar.go` `sweepStrayWaybars()`:
-- `waybarPIDs()` enumerates all PIDs from `pgrep -x waybar`, filtered by
+- `waybarPIDs()` scans `/proc` for processes passing
   `isRealProc(pid, "/waybar")` (non-zombie, `/proc/<pid>/exe` ends in
-  `/waybar`).
-- Sends `SIGTERM` to every one found. Graceful only; no `SIGKILL` escalation
-  (mirrors `ensureSingleInstance` in `pid.go`) - these are pre-existing
-  processes, not ones the sidecar is actively supervising, so there is no
-  `stop()` grace/escalation logic to reuse. Logs "killed stray waybar
-  instance" per PID.
+  `/waybar`). No `pgrep`.
+- Calls `terminatePIDs` (GWS-0008) on them: `SIGTERM`, wait up to
+  `sidecarStopGrace`, then `SIGKILL`. Logs "terminating process" per PID.
 
 Called once, from `main.go` `run()` at startup, after `ensureSingleInstance()`
 and before the first `generate()`/`reloadWaybar()` - so
@@ -39,16 +36,16 @@ None.
 ### Human Testing
 
 - Start a stray waybar manually (`waybar &`), then start the sidecar. Confirm
-  the log contains "killed stray waybar instance" and, once the sidecar has
+  the log contains "terminating process" and, once the sidecar has
   finished starting its own, `pgrep -x waybar` shows exactly one PID - the
   sidecar's.
-- With no waybar running, start the sidecar: confirm no "killed stray waybar
-  instance" log.
+- With no waybar running, start the sidecar: confirm no "terminating process"
+  log.
 
 ### Unit Testing
 
 - Stubbed `waybarPIDsFn` returning several PIDs: every one receives
-  `SIGTERM`.
+  `SIGTERM`; one that never exits receives `SIGKILL` after the grace period.
 - Stubbed `waybarPIDsFn` returning none: zero kills, no log line.
 
 ### Integration Testing

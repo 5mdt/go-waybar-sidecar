@@ -17,12 +17,14 @@ fails or finds no running instance:
   then observe the already-restarted waybar instead of racing their own cold
   start. Why: concurrent cold starts would `stop`/`start` each other's
   freshly-spawned process and produce a spurious failure log.
-- Logs "waybar not running, performing cold start".
+- Logs "waybar not running, performing cold start" at info, only when no
+  tracked waybar is alive. A failed or fatal `SIGUSR2` logs its own warning
+  (GWS-0006) instead.
 - Calls `waybar.stop()` to clear out any tracked process (idempotent - a
   no-op if nothing is running), then `waybar.start()`, which runs `waybar` via
-  `exec.Command("waybar")` with `SysProcAttr{Setsid: true}` so it survives the
-  sidecar's own restart and is not killed by signals sent to the sidecar's
-  process group. See GWS-0027 for how the child is tracked and reaped.
+  `exec.Command("waybar")` with `SysProcAttr{Setsid: true}` so terminal signals
+  sent to the sidecar's process group don't reach it (the sidecar still stops
+  it on shutdown). See GWS-0027 for how the child is tracked and reaped.
 - Waits `coldStartSettleDelay` (500ms), then checks `waybar.alive()`. If
   alive, logs "waybar started" with the PID and returns.
 - Otherwise logs an error, "waybar failed to start".

@@ -22,15 +22,15 @@ Rules:
 ## Implementation
 
 `config.go`:
-- `sidecarDefaults` — ordered descriptor list of the five settings (key name,
-  YAML type tag, built-in default value string).
+- The `settings` table (GWS-0019) supplies each key, its built-in default,
+  and its YAML tag (`!!bool` when `isBool`, else `!!str`).
 - `ensureSettings(path string) error` — called once at startup after
   `ensureConfig()`:
   1. Read the file; return nil (no-op) if missing or unparseable.
   2. Unmarshal into `yaml.Node` (document node). Locate the root
      `MappingNode`; skip if malformed.
   3. Find or create the `sidecar` mapping in the root map.
-  4. For each descriptor not already present in the sidecar map, append a key
+  4. For each table row not already present in the sidecar map, append a key
      scalar + value scalar.
   5. If nothing was added, return nil (idempotent).
   6. If keys were added: call `backupFile(path)` (copies to `path.bak`), then

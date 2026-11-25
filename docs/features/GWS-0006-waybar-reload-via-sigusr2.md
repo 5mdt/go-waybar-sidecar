@@ -20,7 +20,8 @@ avoiding a full restart when possible.
     alive, returns - reload succeeded.
   - If no longer alive, logs a warning and falls through to cold start
     (GWS-0007).
-- If not alive, or `SIGUSR2` fails, falls through to cold start.
+- If not alive, falls through to cold start. If `SIGUSR2` fails, logs a
+  warning and falls through.
 
 ## Configuration
 

@@ -14,6 +14,9 @@ import (
 
 const notifyAppName = "go-waybar-sidecar"
 
+// notifyQueueSize bounds notifications waiting for the sender goroutine.
+const notifyQueueSize = 16
+
 // notifyActionKey is the slog attribute key a call site uses to override a
 // notification's default click action. See notifyOpen.
 const notifyActionKey = "notify_open"
@@ -39,11 +42,11 @@ func notifyOpen(label, path string) slog.Attr {
 	return slog.Any(notifyActionKey, openAction{label: label, path: path})
 }
 
-// sendNotification delivers one desktop notification with a single click
-// action. Bound to a connected notifier's send method in buildLogger;
-// overridable for testing.
-var sendNotification = func(urgency byte, summary, body, label, path string) error {
-	return fmt.Errorf("notifier not connected")
+// notification is one queued desktop notification with a single click action.
+type notification struct {
+	urgency       byte
+	summary, body string
+	label, path   string
 }
 
 // openTarget fulfils a clicked notification action. Overridable for testing.
@@ -103,15 +106,16 @@ func (n *notifier) listen() {
 // handleSignal dispatches a single ActionInvoked/NotificationClosed signal.
 // Split out from listen so it can be tested without a real bus connection.
 func (n *notifier) handleSignal(name string, body []interface{}) {
+	if len(body) < 1 {
+		return
+	}
+	id, ok := body[0].(uint32)
+	if !ok {
+		return
+	}
+
 	switch name {
 	case notifyBusName + ".ActionInvoked":
-		if len(body) < 1 {
-			return
-		}
-		id, ok := body[0].(uint32)
-		if !ok {
-			return
-		}
 		n.mu.Lock()
 		path, found := n.pending[id]
 		n.mu.Unlock()
@@ -119,13 +123,6 @@ func (n *notifier) handleSignal(name string, body []interface{}) {
 			_ = openTarget(path)
 		}
 	case notifyBusName + ".NotificationClosed":
-		if len(body) < 1 {
-			return
-		}
-		id, ok := body[0].(uint32)
-		if !ok {
-			return
-		}
 		n.mu.Lock()
 		delete(n.pending, id)
 		n.mu.Unlock()
@@ -134,12 +131,12 @@ func (n *notifier) handleSignal(name string, body []interface{}) {
 
 // send calls Notify with a single "default" action and records the
 // resulting notification ID against path so a later click can resolve it.
-func (n *notifier) send(urgency byte, summary, body, label, path string) error {
-	actions := []string{"default", label}
-	hints := map[string]dbus.Variant{"urgency": dbus.MakeVariant(urgency)}
+func (n *notifier) send(m notification) error {
+	actions := []string{"default", m.label}
+	hints := map[string]dbus.Variant{"urgency": dbus.MakeVariant(m.urgency)}
 
 	call := n.obj.Call(notifyBusName+".Notify", 0,
-		n.appName, uint32(0), "", summary, body, actions, hints, int32(-1))
+		n.appName, uint32(0), "", m.summary, m.body, actions, hints, int32(-1))
 	if call.Err != nil {
 		return call.Err
 	}
@@ -150,7 +147,7 @@ func (n *notifier) send(urgency byte, summary, body, label, path string) error {
 	}
 
 	n.mu.Lock()
-	n.pending[id] = path
+	n.pending[id] = m.path
 	n.mu.Unlock()
 	return nil
 }
@@ -179,12 +176,13 @@ func parseNotifyLevel(s string) (level slog.Level, enabled bool, err error) {
 	return level, true, nil
 }
 
-// notifyHandler is a slog.Handler that forwards records at or above its
-// threshold to sendNotification. It is best-effort: any failure to send a
-// notification is swallowed, never returned, so logging is unaffected by
-// a missing or broken notification daemon.
+// notifyHandler is a slog.Handler that queues records at or above its
+// threshold for a sender goroutine. It is best-effort: when the queue is full
+// the record is dropped, never blocked on or returned as an error, so logging
+// is unaffected by a missing, slow or broken notification daemon.
 type notifyHandler struct {
 	threshold slog.Level
+	queue     chan<- notification
 	attrs     []slog.Attr
 }
 
@@ -221,13 +219,17 @@ func (h *notifyHandler) Handle(_ context.Context, r slog.Record) error {
 		return true
 	})
 
-	_ = sendNotification(urgencyHint(r.Level), r.Message, body.String(), label, path)
+	select {
+	case h.queue <- notification{urgencyHint(r.Level), r.Message, body.String(), label, path}:
+	default:
+	}
 	return nil
 }
 
 func (h *notifyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &notifyHandler{
 		threshold: h.threshold,
+		queue:     h.queue,
 		attrs:     append(append([]slog.Attr{}, h.attrs...), attrs...),
 	}
 }

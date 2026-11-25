@@ -1,302 +1,221 @@
 package main
 
 import (
+	"flag"
+	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
 
+// parseTestFlags builds the real flag set and parses args into it.
+func parseTestFlags(t *testing.T, args ...string) *flag.FlagSet {
+	t.Helper()
+	fs := newFlagSet()
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		t.Fatal(err)
+	}
+	return fs
+}
+
+// clearSettingsEnv unsets every settings env var for the test's duration.
+func clearSettingsEnv(t *testing.T) {
+	t.Helper()
+	for _, s := range settings {
+		t.Setenv(s.env, "")
+		os.Unsetenv(s.env)
+	}
+	t.Setenv(configEnv, "")
+	os.Unsetenv(configEnv)
+}
+
 // loadSettings tests
 
 func TestLoadSettings_ValidSidecarSection(t *testing.T) {
-	dir := t.TempDir()
-	cfgFile := filepath.Join(dir, "config.yaml")
-	content := `
+	cfgFile := filepath.Join(t.TempDir(), "config.yaml")
+	writeFile(t, cfgFile, `
 sidecar:
   log-level: debug
   log-output: /tmp/app.log
   notify-level: warn
   no-generate: true
-  daemon: true
+  daemon: yes
 waybar:
   layer: top
-`
-	if err := os.WriteFile(cfgFile, []byte(content), 0o644); err != nil {
+`)
+	got, err := loadSettings(cfgFile)
+	if err != nil {
 		t.Fatal(err)
 	}
-	s := loadSettings(cfgFile)
-	if s.LogLevel == nil || *s.LogLevel != "debug" {
-		t.Errorf("LogLevel: got %v, want debug", s.LogLevel)
+	want := map[string]string{
+		"log-level": "debug", "log-output": "/tmp/app.log", "notify-level": "warn",
+		"no-generate": "true", "daemon": "yes",
 	}
-	if s.LogOutput == nil || *s.LogOutput != "/tmp/app.log" {
-		t.Errorf("LogOutput: got %v, want /tmp/app.log", s.LogOutput)
-	}
-	if s.NotifyLevel == nil || *s.NotifyLevel != "warn" {
-		t.Errorf("NotifyLevel: got %v, want warn", s.NotifyLevel)
-	}
-	if s.NoGenerate == nil || !*s.NoGenerate {
-		t.Errorf("NoGenerate: got %v, want true", s.NoGenerate)
-	}
-	if s.Daemon == nil || !*s.Daemon {
-		t.Errorf("Daemon: got %v, want true", s.Daemon)
+	if !maps.Equal(got, want) {
+		t.Errorf("loadSettings() = %v, want %v", got, want)
 	}
 }
 
-func TestLoadSettings_MissingFile(t *testing.T) {
-	s := loadSettings(filepath.Join(t.TempDir(), "does-not-exist.yaml"))
-	if s.LogLevel != nil || s.LogOutput != nil || s.NotifyLevel != nil || s.NoGenerate != nil || s.Daemon != nil {
-		t.Error("expected all-nil sidecarSettings for missing file")
+func TestLoadSettings_MissingFileOrKey(t *testing.T) {
+	got, err := loadSettings(filepath.Join(t.TempDir(), "does-not-exist.yaml"))
+	if err != nil || len(got) != 0 {
+		t.Errorf("missing file: got %v, %v; want empty, nil", got, err)
+	}
+
+	cfgFile := filepath.Join(t.TempDir(), "config.yaml")
+	writeFile(t, cfgFile, "waybar:\n  layer: top\n")
+	got, err = loadSettings(cfgFile)
+	if err != nil || len(got) != 0 {
+		t.Errorf("no sidecar key: got %v, %v; want empty, nil", got, err)
 	}
 }
 
-func TestLoadSettings_NoSidecarKey(t *testing.T) {
-	dir := t.TempDir()
-	cfgFile := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(cfgFile, []byte("waybar:\n  layer: top\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	s := loadSettings(cfgFile)
-	if s.LogLevel != nil || s.LogOutput != nil || s.NotifyLevel != nil || s.NoGenerate != nil || s.Daemon != nil {
-		t.Error("expected all-nil sidecarSettings when sidecar: key is absent")
-	}
-}
-
-func TestLoadSettings_PartialSidecarSection(t *testing.T) {
-	dir := t.TempDir()
-	cfgFile := filepath.Join(dir, "config.yaml")
-	content := "sidecar:\n  log-level: warn\n"
-	if err := os.WriteFile(cfgFile, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	s := loadSettings(cfgFile)
-	if s.LogLevel == nil || *s.LogLevel != "warn" {
-		t.Errorf("LogLevel: got %v, want warn", s.LogLevel)
-	}
-	if s.LogOutput != nil {
-		t.Errorf("LogOutput: expected nil for absent key, got %v", s.LogOutput)
+func TestLoadSettings_MalformedYAML(t *testing.T) {
+	cfgFile := filepath.Join(t.TempDir(), "config.yaml")
+	writeFile(t, cfgFile, "sidecar: [unclosed\n")
+	if _, err := loadSettings(cfgFile); err == nil {
+		t.Error("expected an error for malformed YAML")
 	}
 }
 
 // resolveConfigPath tests
 
-func TestResolveConfigPath_Default(t *testing.T) {
+func TestResolveConfigPath_Precedence(t *testing.T) {
 	orig := configPath
 	configPath = "/default/config.yaml"
 	defer func() { configPath = orig }()
-
-	t.Setenv("GO_WAYBAR_SIDECAR_CONFIG", "")
-	os.Unsetenv("GO_WAYBAR_SIDECAR_CONFIG")
-
-	got := resolveConfigPath(cliFlags{}, map[string]bool{})
-	if got != configPath {
-		t.Errorf("got %q, want %q", got, configPath)
-	}
-}
-
-func TestResolveConfigPath_Env(t *testing.T) {
-	orig := configPath
-	configPath = "/default/config.yaml"
-	defer func() { configPath = orig }()
-
-	dir := t.TempDir()
-	envPath := filepath.Join(dir, "env.yaml")
-	t.Setenv("GO_WAYBAR_SIDECAR_CONFIG", envPath)
-
-	got := resolveConfigPath(cliFlags{}, map[string]bool{})
-	if got != envPath {
-		t.Errorf("got %q, want %q", got, envPath)
-	}
-}
-
-func TestResolveConfigPath_FlagOverridesEnv(t *testing.T) {
-	orig := configPath
-	configPath = "/default/config.yaml"
-	defer func() { configPath = orig }()
+	clearSettingsEnv(t)
 
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, "env.yaml")
 	flagPath := filepath.Join(dir, "flag.yaml")
-	t.Setenv("GO_WAYBAR_SIDECAR_CONFIG", envPath)
 
-	f := cliFlags{config: flagPath}
-	set := map[string]bool{"config": true}
-	got := resolveConfigPath(f, set)
-	if got != flagPath {
-		t.Errorf("got %q, want %q", got, flagPath)
+	if got := resolveConfigPath(parseTestFlags(t)); got != configPath {
+		t.Errorf("default: got %q, want %q", got, configPath)
+	}
+
+	t.Setenv(configEnv, envPath)
+	if got := resolveConfigPath(parseTestFlags(t)); got != envPath {
+		t.Errorf("env: got %q, want %q", got, envPath)
+	}
+	if got := resolveConfigPath(parseTestFlags(t, "--config", flagPath)); got != flagPath {
+		t.Errorf("flag: got %q, want %q", got, flagPath)
 	}
 }
 
 // resolveSettings tests
 
-func ptr[T any](v T) *T { return &v }
-
 func TestResolveSettings_Defaults(t *testing.T) {
-	os.Unsetenv("GO_WAYBAR_SIDECAR_LOG_LEVEL")
-	os.Unsetenv("GO_WAYBAR_SIDECAR_LOG_OUTPUT")
-	os.Unsetenv("GO_WAYBAR_SIDECAR_NOTIFY_LEVEL")
-	os.Unsetenv("GO_WAYBAR_SIDECAR_NO_GENERATE")
-	os.Unsetenv("GO_WAYBAR_SIDECAR_DAEMON")
-
-	r := resolveSettings(cliFlags{}, map[string]bool{}, sidecarSettings{})
-	if r.logLevel != defaultLogLevel {
-		t.Errorf("logLevel: got %q, want %q", r.logLevel, defaultLogLevel)
+	clearSettingsEnv(t)
+	r, err := resolveSettings(parseTestFlags(t), nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if r.logOutput != defaultLogOutput {
-		t.Errorf("logOutput: got %q, want %q", r.logOutput, defaultLogOutput)
+	want := resolvedSettings{
+		logLevel: defaultLogLevel, logOutput: defaultLogOutput, notifyLevel: defaultNotifyLevel,
+		noGenerate: defaultNoGenerate, daemon: defaultDaemon,
 	}
-	if r.notifyLevel != defaultNotifyLevel {
-		t.Errorf("notifyLevel: got %q, want %q", r.notifyLevel, defaultNotifyLevel)
-	}
-	if r.noGenerate != defaultNoGenerate {
-		t.Errorf("noGenerate: got %v, want %v", r.noGenerate, defaultNoGenerate)
-	}
-	if r.daemon != defaultDaemon {
-		t.Errorf("daemon: got %v, want %v", r.daemon, defaultDaemon)
+	if r != want {
+		t.Errorf("got %+v, want %+v", r, want)
 	}
 }
 
-func TestResolveSettings_FileOverridesDefaults(t *testing.T) {
-	os.Unsetenv("GO_WAYBAR_SIDECAR_LOG_LEVEL")
-	os.Unsetenv("GO_WAYBAR_SIDECAR_LOG_OUTPUT")
-	os.Unsetenv("GO_WAYBAR_SIDECAR_NOTIFY_LEVEL")
-	os.Unsetenv("GO_WAYBAR_SIDECAR_NO_GENERATE")
-	os.Unsetenv("GO_WAYBAR_SIDECAR_DAEMON")
-
-	s := sidecarSettings{
-		LogLevel:    ptr("debug"),
-		LogOutput:   ptr("/var/log/gws.log"),
-		NotifyLevel: ptr("warn"),
-		NoGenerate:  ptr(true),
-		Daemon:      ptr(true),
-	}
-	r := resolveSettings(cliFlags{}, map[string]bool{}, s)
-	if r.logLevel != "debug" {
-		t.Errorf("logLevel: got %q, want debug", r.logLevel)
-	}
-	if r.logOutput != "/var/log/gws.log" {
-		t.Errorf("logOutput: got %q", r.logOutput)
-	}
-	if r.notifyLevel != "warn" {
-		t.Errorf("notifyLevel: got %q, want warn", r.notifyLevel)
-	}
-	if !r.noGenerate {
-		t.Error("noGenerate: expected true")
-	}
-	if !r.daemon {
-		t.Error("daemon: expected true")
-	}
-}
-
-func TestResolveSettings_EnvOverridesFile(t *testing.T) {
-	t.Setenv("GO_WAYBAR_SIDECAR_LOG_LEVEL", "error")
-	t.Setenv("GO_WAYBAR_SIDECAR_LOG_OUTPUT", "stderr")
-	t.Setenv("GO_WAYBAR_SIDECAR_NOTIFY_LEVEL", "off")
-	t.Setenv("GO_WAYBAR_SIDECAR_NO_GENERATE", "1")
-	t.Setenv("GO_WAYBAR_SIDECAR_DAEMON", "0")
-
-	s := sidecarSettings{
-		LogLevel:    ptr("debug"),
-		LogOutput:   ptr("/var/log/gws.log"),
-		NotifyLevel: ptr("warn"),
-		NoGenerate:  ptr(false),
-		Daemon:      ptr(true),
-	}
-	r := resolveSettings(cliFlags{}, map[string]bool{}, s)
-	if r.logLevel != "error" {
-		t.Errorf("logLevel: got %q, want error", r.logLevel)
-	}
-	if r.logOutput != "stderr" {
-		t.Errorf("logOutput: got %q, want stderr", r.logOutput)
-	}
-	if r.notifyLevel != "off" {
-		t.Errorf("notifyLevel: got %q, want off", r.notifyLevel)
-	}
-	if !r.noGenerate {
-		t.Error("noGenerate: expected true (from env 1)")
-	}
-	if r.daemon {
-		t.Error("daemon: expected false (from env 0)")
-	}
-}
-
-func TestResolveSettings_FlagOverridesEnv(t *testing.T) {
-	t.Setenv("GO_WAYBAR_SIDECAR_LOG_LEVEL", "warn")
-	t.Setenv("GO_WAYBAR_SIDECAR_LOG_OUTPUT", "stderr")
-	t.Setenv("GO_WAYBAR_SIDECAR_NOTIFY_LEVEL", "info")
-	t.Setenv("GO_WAYBAR_SIDECAR_NO_GENERATE", "1")
-	t.Setenv("GO_WAYBAR_SIDECAR_DAEMON", "1")
-
-	f := cliFlags{
-		logLevel:    "debug",
-		logOutput:   "stdout",
-		notifyLevel: "error",
-		noGenerate:  false,
-		daemon:      false,
-	}
-	set := map[string]bool{
-		"log-level":    true,
-		"log-output":   true,
-		"notify-level": true,
-		"no-generate":  true,
-		"daemon":       true,
-	}
-	r := resolveSettings(f, set, sidecarSettings{})
-	if r.logLevel != "debug" {
-		t.Errorf("logLevel: got %q, want debug", r.logLevel)
-	}
-	if r.logOutput != "stdout" {
-		t.Errorf("logOutput: got %q, want stdout", r.logOutput)
-	}
-	if r.notifyLevel != "error" {
-		t.Errorf("notifyLevel: got %q, want error", r.notifyLevel)
-	}
-	if r.noGenerate {
-		t.Error("noGenerate: expected false (flag wins over env)")
-	}
-	if r.daemon {
-		t.Error("daemon: expected false (flag wins over env)")
-	}
-}
-
-func TestResolveSettings_BoolEnv_ValidValues(t *testing.T) {
-	cases := []struct {
-		val  string
-		want bool
-	}{
-		{"true", true},
-		{"false", false},
-		{"1", true},
-		{"0", false},
-		{"TRUE", true},
-		{"FALSE", false},
-		{"yes", true},
-		{"no", false},
-		{"YES", true},
-		{"NO", false},
-		{"Yes", true},
-		{"No", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.val, func(t *testing.T) {
-			t.Setenv("GO_WAYBAR_SIDECAR_NO_GENERATE", tc.val)
-			os.Unsetenv("GO_WAYBAR_SIDECAR_DAEMON")
-			r := resolveSettings(cliFlags{}, map[string]bool{}, sidecarSettings{})
-			if r.noGenerate != tc.want {
-				t.Errorf("GO_WAYBAR_SIDECAR_NO_GENERATE=%q: got %v, want %v", tc.val, r.noGenerate, tc.want)
+// TestResolveSettings_Precedence checks every setting through every layer:
+// each higher layer wins over the lower ones.
+func TestResolveSettings_Precedence(t *testing.T) {
+	for _, s := range settings {
+		file, env, flagV := "file-value", "env-value", "flag-value"
+		if s.isBool {
+			file, env, flagV = "true", "yes", "false"
+		}
+		t.Run(s.key, func(t *testing.T) {
+			layers := []struct {
+				name string
+				file map[string]string
+				env  string
+				args []string
+				want string
+			}{
+				{"file over default", map[string]string{s.key: file}, "", nil, file},
+				{"env over file", map[string]string{s.key: file}, env, nil, env},
+				{"flag over env", map[string]string{s.key: file}, env, []string{"--" + s.key + "=" + flagV}, flagV},
+			}
+			for _, l := range layers {
+				clearSettingsEnv(t)
+				if l.env != "" {
+					t.Setenv(s.env, l.env)
+				}
+				r, err := resolveSettings(parseTestFlags(t, l.args...), l.file)
+				if err != nil {
+					t.Fatalf("%s: %v", l.name, err)
+				}
+				if got := settingValue(r, s.key); got != normalize(s, l.want) {
+					t.Errorf("%s: got %q, want %q", l.name, got, normalize(s, l.want))
+				}
 			}
 		})
 	}
 }
 
-func TestResolveSettings_BoolEnv_InvalidIgnored(t *testing.T) {
+// settingValue reads one resolved field back as the string the table row uses.
+func settingValue(r resolvedSettings, key string) string {
+	switch key {
+	case "log-level":
+		return r.logLevel
+	case "log-output":
+		return r.logOutput
+	case "notify-level":
+		return r.notifyLevel
+	case "no-generate":
+		return strconv.FormatBool(r.noGenerate)
+	case "daemon":
+		return strconv.FormatBool(r.daemon)
+	}
+	return "?"
+}
+
+func normalize(s setting, v string) string {
+	if !s.isBool {
+		return v
+	}
+	b, _ := parseBoolEnv(v)
+	return strconv.FormatBool(b)
+}
+
+func TestResolveSettings_BoolValues(t *testing.T) {
+	cases := map[string]bool{
+		"true": true, "false": false, "1": true, "0": false, "TRUE": true,
+		"FALSE": false, "yes": true, "no": false, "YES": true, "No": false,
+	}
+	for val, want := range cases {
+		t.Run(val, func(t *testing.T) {
+			clearSettingsEnv(t)
+			t.Setenv("GO_WAYBAR_SIDECAR_NO_GENERATE", val)
+			r, err := resolveSettings(parseTestFlags(t), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if r.noGenerate != want {
+				t.Errorf("NO_GENERATE=%q: got %v, want %v", val, r.noGenerate, want)
+			}
+		})
+	}
+}
+
+func TestResolveSettings_InvalidBoolIsError(t *testing.T) {
+	clearSettingsEnv(t)
 	t.Setenv("GO_WAYBAR_SIDECAR_NO_GENERATE", "yes-please")
-	os.Unsetenv("GO_WAYBAR_SIDECAR_DAEMON")
-	// invalid value → falls back to default (false)
-	s := sidecarSettings{NoGenerate: ptr(false)}
-	r := resolveSettings(cliFlags{}, map[string]bool{}, s)
-	if r.noGenerate {
-		t.Error("invalid env bool should be ignored; expected noGenerate=false")
+	if _, err := resolveSettings(parseTestFlags(t), nil); err == nil {
+		t.Error("expected an error for an invalid env bool")
+	}
+
+	clearSettingsEnv(t)
+	if _, err := resolveSettings(parseTestFlags(t), map[string]string{"daemon": "maybe"}); err == nil {
+		t.Error("expected an error for an invalid file bool")
 	}
 }
 
@@ -445,6 +364,25 @@ func TestEnsureSettings_DefaultValues(t *testing.T) {
 	} {
 		if !strings.Contains(content, wantSubstr) {
 			t.Errorf("expected %q in output:\n%s", wantSubstr, content)
+		}
+	}
+}
+
+func TestEnsureSettings_AllTableKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	writeFile(t, path, "waybar:\n  layer: top\n")
+
+	if err := ensureSettings(path); err != nil {
+		t.Fatalf("ensureSettings: %v", err)
+	}
+
+	got, err := loadSettings(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range settings {
+		if got[s.key] != s.def {
+			t.Errorf("%s = %q, want default %q", s.key, got[s.key], s.def)
 		}
 	}
 }

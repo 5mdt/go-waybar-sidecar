@@ -37,15 +37,15 @@ inactive.
     `ActionInvoked` and `NotificationClosed` signals: on `ActionInvoked` it
     looks up the path and calls `openTarget`; on `NotificationClosed` it drops
     the ID so the pending map can't grow unbounded.
-- `sendNotification` (var, stubbable) is bound to a `notifier`'s `send` method;
-  see GWS-0026 for the click-action attribute this depends on.
+- `notification{urgency, summary, body, label, path}` is the queued unit;
+  see GWS-0026 for the click-action attribute behind `label`/`path`.
 - `openTarget` (var, stubbable) runs `xdg-open <path>` to fulfil a clicked
   action.
 - `notifyHandler` is a `slog.Handler` that, for records at or above its
-  threshold, calls `sendNotification` with the record message as the
-  notification summary and the formatted attributes as the body. `Handle`
-  always returns `nil`: any `sendNotification` error is swallowed so a broken
-  or absent notification daemon never affects logging or causes a fatal error.
+  threshold, does a non-blocking send of a `notification` (record message as
+  summary, formatted attributes as body) to its queue. When the queue is full
+  the record is dropped, and `Handle` always returns `nil`, so a hung or
+  absent notification daemon never blocks or breaks logging.
 - `multiHandler` is a `slog.Handler` that fans `Handle`/`WithAttrs`/
   `WithGroup` out to multiple child handlers, gating each child on its own
   `Enabled`.
@@ -56,7 +56,9 @@ inactive.
 - `buildLogger(level, output, notifyLevel, notifyEnabled)` always builds the
   existing `TextHandler`. If `notifyEnabled`, it calls `newNotifier` and, if
   that succeeds, also builds a `notifyHandler` and combines both via
-  `multiHandler`. Otherwise the text handler is used unchanged.
+  `multiHandler`. Otherwise the text handler is used unchanged. The queue is
+  a `chan notification` (capacity 16) drained by one goroutine calling
+  `notifier.send`; send errors are ignored.
 - If notifications are requested (`notifyEnabled == true`) but `newNotifier`
   fails, an info line ("desktop notifications inactive") is logged once at
   startup and the process continues normally with text logging only.
@@ -96,11 +98,11 @@ inactive.
   `"info"`/`"debug"` → enabled with the matching level; invalid string →
   error.
 - `notifyHandler.Enabled`: true only when the record level is >= threshold.
-- `notifyHandler.Handle`: a record at/above threshold calls
-  `sendNotification` with the expected app name, urgency, summary, and body;
-  a record below threshold does not call it.
-- `notifyHandler.Handle` resilience: when the stubbed `sendNotification`
-  returns an error, `Handle` still returns `nil`.
+- `notifyHandler.Handle`: a record at/above threshold queues a notification
+  with the expected urgency, summary, and body; a record below threshold
+  queues nothing.
+- `notifyHandler.Handle` resilience: with a full queue (or none), `Handle`
+  returns `nil` immediately without blocking.
 - notifier action dispatch (see GWS-0026 for the click-action attribute
   itself): a known notification ID resolves to the recorded path and calls
   `openTarget`; an unknown ID does nothing; `NotificationClosed` removes the

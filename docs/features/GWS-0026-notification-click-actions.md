@@ -26,8 +26,8 @@ its own target; otherwise the notification opens `config.yaml`.
   and the attribute is excluded from the notification body (it already appears
   in the text log via `LogValue`). If absent, the default action is
   `notifyOpen("Open config", configPath)`.
-- The resolved label/path are passed to `sendNotification`, which threads them
-  through to `notifier.send` (GWS-0013) as the `Notify` action.
+- The resolved label/path are queued with the notification and threaded by
+  `notifier.send` (GWS-0013) into the `Notify` action.
 
 Call sites that override the default:
 - `cron.go`, job failure: `notifyOpen("Show output", expandHome(j.Output))`
@@ -57,10 +57,10 @@ None. Actions are derived from the log call site, not user-configurable.
 
 ### Unit Testing
 
-- `notifyHandler.Handle` with no `notify_open` attr: `sendNotification`
-  receives label `"Open config"` and `configPath`.
+- `notifyHandler.Handle` with no `notify_open` attr: the queued notification
+  has label `"Open config"` and `configPath`.
 - `notifyHandler.Handle` with `notifyOpen("Show output", "/tmp/x")` in the
-  record attrs: `sendNotification` receives that label/path, and the
+  record attrs: the queued notification has that label/path, and the
   notification body does not contain `notify_open=`.
 - `openAction.LogValue`: returns the path only.
 

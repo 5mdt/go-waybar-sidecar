@@ -46,11 +46,9 @@ func validateMenuDoc(doc *etree.Document) error {
 func generate(cfg Config) {
 	if noGenerate {
 		logger.Debug("generation skipped (--no-generate)")
-		doReload()
-		return
+	} else {
+		writeOutputs(cfg)
 	}
-
-	writeOutputs(cfg)
 	doReload()
 }
 

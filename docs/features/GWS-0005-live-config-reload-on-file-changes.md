@@ -11,7 +11,7 @@ edits.
 
 ## Implementation
 
-`watcher.go` `watch(cfg)`, run as a goroutine from `run()`:
+`watcher.go` `watch(trigger func()) error`, run as a goroutine from `run()`:
 - Creates an `fsnotify.Watcher` and adds watches for `configPath` and
   `waybarDir` via `addWatch()`. `addWatch()` watches a file directly, or walks
   a directory and watches every subdirectory (fsnotify is non-recursive).
@@ -24,12 +24,15 @@ edits.
     `waybarDir` must have extension `.json`, `.jsonc`, or `.css`.
     Editor artifacts (`.swp`, `~`, `.bak`, all-numeric names, etc.) are
     implicitly excluded as their extensions are not whitelisted.
-  - Otherwise logs the change and (re)starts a 200ms debounce timer. When the
-    timer fires, it calls `reload(cfg)`, which calls `loadConfig()` and
-    `generate()` with the result stored back into `*cfg`; if `loadConfig()`
-    fails, the previous `*cfg` is kept (see GWS-0017). `reload()` holds
-    `reloadCfgMu` for its whole run, so overlapping debounce callbacks are
-    serialized and never race on `*cfg`.
+  - Otherwise logs the change and calls `trigger`.
+- `debounce(d, f) func()` returns the trigger built in `run()`: each call
+  restarts a 200ms timer, and when it fires `f` signals the reload loop
+  (below). The power-profile watcher (GWS-0029) shares the same trigger.
+- `run()` ends in one reload loop that owns the `Config`: for each signal it
+  runs `cfg = reload(cfg)`, so reloads are sequential and nothing else touches
+  the config. `reload(cfg Config) Config` calls `loadConfig()` and
+  `generate()`; if `loadConfig()` fails, the previous config is returned
+  (see GWS-0017).
 - Directories created after startup under a watched root are added via
   `addWatch()` (`handleCreate()`). A root missing at startup is tracked in
   `pending`; its nearest existing ancestor is watched, and the root is added
@@ -71,13 +74,12 @@ edits.
 - `handleCreate()`: a new subdirectory and a pending root get watched
   (`w.WatchList()`); `nearestExisting()` returns the closest existing
   ancestor; `isWatchedFile()` is false for `.json` outside `waybarDir`.
-- `reload()` called concurrently passes under `-race`.
+- `debounce()`: three rapid calls invoke the callback once.
 
 ### Integration Testing
 
 - Start `watch()` against a temp `configPath`/`waybarDir`, modify
-  `configPath`, and assert `generate()` runs (e.g. `outJSON`'s mtime updates)
-  within the debounce window plus a small margin.
+  `configPath`, and assert the trigger fires within a small margin.
 - Modify `outJSON` or a file under `menuDir` directly and assert no
   regeneration is triggered.
 

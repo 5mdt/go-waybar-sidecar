@@ -18,8 +18,8 @@ to render.
   - If `configPath` exists, logs at debug and returns.
   - Otherwise logs at info, creates `filepath.Dir(configPath)` (`0o755`), and
     writes `defaultConfig` to `configPath` (`0o644`).
-  - Any error creating the directory or writing the file logs at error and
-    exits the process (`os.Exit(1)`).
+  - Any error creating the directory or writing the file is returned;
+    `run()` logs it at error and exits the process (`os.Exit(1)`).
 
 ## Configuration
 
@@ -47,6 +47,8 @@ to render.
   embedded bytes.
 - `ensureConfig()` with `configPath` pointing at an existing file: assert the
   file's contents are unchanged after the call.
+- `ensureConfig()` with a `configPath` that cannot be created (parent is a
+  regular file): returns an error.
 
 ### Integration Testing
 

@@ -1,9 +1,9 @@
 package main
 
 import (
+	"os"
 	"os/exec"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -48,10 +48,10 @@ type waybarProc struct {
 	expectExit bool
 }
 
-// start launches a fresh waybar, detached into its own session so it
-// survives the sidecar's own signals/restart. A background goroutine reaps
-// it via Wait() and, if it exits without stop() having been called first,
-// schedules an auto-restart.
+// start launches a fresh waybar in its own session, shielding it from
+// terminal signals sent to the sidecar's group (the sidecar still stops it on
+// shutdown). A background goroutine reaps it via Wait() and, if it exits
+// without stop() having been called first, schedules an auto-restart.
 func (p *waybarProc) start() error {
 	p.mu.Lock()
 	cmd := exec.Command("waybar")
@@ -191,18 +191,19 @@ func reloadWaybar() {
 	reloadMu.Lock()
 	defer reloadMu.Unlock()
 
-	if waybar.alive() {
-		if err := syscall.Kill(waybar.pid(), syscall.SIGUSR2); err == nil {
-			logger.Info("waybar reloaded via USR2", "pid", waybar.pid())
-			time.Sleep(usr2SettleDelay)
-			if waybar.alive() {
-				return
-			}
-			logger.Warn("waybar died after reload, falling back to cold start")
+	if !waybar.alive() {
+		logger.Info("waybar not running, performing cold start")
+	} else if err := syscall.Kill(waybar.pid(), syscall.SIGUSR2); err != nil {
+		logger.Warn("USR2 failed, falling back to cold start", "err", err)
+	} else {
+		logger.Info("waybar reloaded via USR2", "pid", waybar.pid())
+		time.Sleep(usr2SettleDelay)
+		if waybar.alive() {
+			return
 		}
+		logger.Warn("waybar died after reload, falling back to cold start")
 	}
 
-	logger.Warn("waybar not running, performing cold start")
 	waybar.stop()
 
 	if err := waybar.start(); err != nil {
@@ -221,26 +222,19 @@ func reloadWaybar() {
 // sweepStrayWaybars terminates every waybar process found at startup: the
 // sidecar owns none yet, so all of them are strays from a previous session.
 func sweepStrayWaybars() {
-	for _, pid := range waybarPIDsFn() {
-		if err := killFn(pid, syscall.SIGTERM); err == nil {
-			logger.Info("killed stray waybar instance", "pid", pid)
-		}
-	}
+	terminatePIDs(waybarPIDsFn())
 }
 
 // waybarPIDs returns all PIDs of valid waybar processes (non-zombie, correct exe).
 func waybarPIDs() []int {
-	out, err := exec.Command("pgrep", "-x", "waybar").Output()
+	entries, err := os.ReadDir("/proc")
 	if err != nil {
 		return nil
 	}
 	var pids []int
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		pid, err := strconv.Atoi(strings.TrimSpace(line))
-		if err != nil || pid == 0 {
-			continue
-		}
-		if isRealProc(pid, "/waybar") {
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
+		if err == nil && isRealProc(pid, "/waybar") {
 			pids = append(pids, pid)
 		}
 	}

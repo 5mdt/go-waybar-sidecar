@@ -29,12 +29,13 @@ The `--no-generate` flag opts out of the yaml-to-output generation step
 - After `flag.Parse()`, `noGenerate = *noGenerateFlag`.
 - `flag.Usage` documents the flag.
 - `run()`: when `noGenerate` is set, skips `ensureConfig()` and `loadConfig()`
-  entirely (an empty `Config{}` is passed to `generate`/`watch` instead) - a
+  entirely (an empty `Config{}` is passed to `generate` instead) - a
   missing or invalid `config.yaml` is irrelevant in this mode.
 
 `watcher.go`:
-- The debounce callback in `watch()` only calls `loadConfig()` when
-  `!noGenerate`; it always calls `generate(*cfg)`, which performs the reload.
+- `reload()` only calls `loadConfig()` when `!noGenerate`; it always calls
+  `generate(cfg)`, which writes outputs only when `!noGenerate` and always
+  reloads waybar once.
 
 ## Configuration
 

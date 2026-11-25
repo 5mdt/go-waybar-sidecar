@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,11 +11,10 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-func watch(cfg *Config) {
+func watch(trigger func()) error {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
-		logger.Error("failed to create watcher", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("create watcher: %w", err)
 	}
 	defer w.Close()
 
@@ -45,23 +45,6 @@ func watch(cfg *Config) {
 		}
 	}
 
-	var (
-		timer   *time.Timer
-		timerMu sync.Mutex
-	)
-	scheduleReload := func() {
-		timerMu.Lock()
-		if timer != nil {
-			timer.Stop()
-		}
-		timer = time.AfterFunc(200*time.Millisecond, func() {
-			reload(cfg)
-		})
-		timerMu.Unlock()
-	}
-
-	go watchPowerProfiles(scheduleReload)
-
 	for {
 		select {
 		case e := <-w.Events:
@@ -70,14 +53,14 @@ func watch(cfg *Config) {
 			}
 			if handleCreate(w, e, watchPaths, pending) {
 				logger.Info("app directory appeared", "dir", e.Name)
-				scheduleReload()
+				trigger()
 			}
 			if !acceptEvent(e.Name, targets) {
 				continue
 			}
 
 			logger.Info("change detected", "file", e.Name, "op", e.Op.String())
-			scheduleReload()
+			trigger()
 
 		case err := <-w.Errors:
 			logger.Warn("watcher error", "err", err)
@@ -85,27 +68,37 @@ func watch(cfg *Config) {
 	}
 }
 
-// reloadCfgMu serializes reload() so overlapping debounce callbacks never
-// race on *cfg.
-var reloadCfgMu sync.Mutex
+// debounce returns a function that runs f once, d after its last call.
+func debounce(d time.Duration, f func()) func() {
+	var (
+		mu    sync.Mutex
+		timer *time.Timer
+	)
+	return func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if timer != nil {
+			timer.Stop()
+		}
+		timer = time.AfterFunc(d, f)
+	}
+}
 
-// reload loads the latest config and regenerates outputs. If loading fails
-// (e.g. invalid YAML), the previous *cfg is kept and generation runs against
-// it instead of exiting (see GWS-0017).
-func reload(cfg *Config) {
-	reloadCfgMu.Lock()
-	defer reloadCfgMu.Unlock()
-
+// reload loads the latest config, regenerates outputs, and returns the config
+// now in effect. If loading fails (e.g. invalid YAML), the previous cfg is
+// kept and nothing is regenerated instead of exiting (see GWS-0017).
+func reload(cfg Config) Config {
 	if !noGenerate {
 		newCfg, err := loadConfig()
 		if err != nil {
 			logger.Error("reload failed, keeping previous config", "err", err)
-			return
+			return cfg
 		}
-		*cfg = newCfg
+		cfg = newCfg
 	}
-	generate(*cfg)
+	generate(cfg)
 	jobs.restart(cfg.Jobs)
+	return cfg
 }
 
 // nearestExisting returns p, or its closest existing ancestor.

@@ -38,7 +38,7 @@ live-reload path (see GWS-0005) without restarting the sidecar.
   equals the previously started list, so unrelated reloads don't reset
   schedules. Otherwise it cancels the old context, drains in-flight runs with
   `wg.Wait()`, then starts fresh goroutines for all valid jobs.
-- Overridable vars for testing (mirror `sendNotification` in `notify.go`):
+- Overridable vars for testing (mirror `openTarget` in `notify.go`):
   `var jobExec = func(ctx context.Context, command string) ([]byte, error)`
   (runs `sh -c` in its own process group via `exec.CommandContext`; on cancel
   the whole group is SIGKILLed, `WaitDelay` 1s, so a hung job cannot block
@@ -48,8 +48,8 @@ live-reload path (see GWS-0005) without restarting the sidecar.
 
 Wired in:
 - `main.go` `run()`: calls `jobs.restart(cfg.Jobs)` after `generate(cfg)`.
-- `watcher.go` `reload(cfg)`: calls `jobs.restart(cfg.Jobs)` after updating
-  `*cfg`, so edited jobs take effect on live reload.
+- `watcher.go` `reload(cfg)`: calls `jobs.restart(cfg.Jobs)` after loading the
+  new config, so edited jobs take effect on live reload.
 
 ## Configuration
 

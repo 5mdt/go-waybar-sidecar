@@ -59,9 +59,8 @@ auto-switch on AC/battery).
   bool)`.
 
 `watcher.go`:
-- `watch()`'s debounced reload trigger is factored into a `scheduleReload`
-  closure, now shared between fsnotify events and a `go
-  watchPowerProfiles(scheduleReload)` goroutine, so an external profile
+- The debounced reload trigger (GWS-0005) is shared between fsnotify events
+  and a `go watchPowerProfiles(trigger)` goroutine started by `run()`, so an external profile
   change reloads the same way an edited `config.yaml` does (GWS-0005).
 
 ## Configuration

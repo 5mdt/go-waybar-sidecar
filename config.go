@@ -3,7 +3,10 @@ package main
 import (
 	"bytes"
 	_ "embed"
+	"errors"
+	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -52,19 +55,9 @@ type Config struct {
 }
 
 type rawConfig struct {
-	Waybar  map[string]any   `yaml:"waybar"`
-	Sidecar *sidecarSettings `yaml:"sidecar"`
-	Jobs    []Job            `yaml:"jobs"`
-}
-
-// sidecarSettings holds runtime settings from the sidecar: section of config.yaml.
-// Pointer fields distinguish "absent" (nil) from "set to zero value".
-type sidecarSettings struct {
-	LogLevel    *string `yaml:"log-level"`
-	LogOutput   *string `yaml:"log-output"`
-	NotifyLevel *string `yaml:"notify-level"`
-	NoGenerate  *bool   `yaml:"no-generate"`
-	Daemon      *bool   `yaml:"daemon"`
+	Waybar  map[string]any    `yaml:"waybar"`
+	Sidecar map[string]string `yaml:"sidecar"`
+	Jobs    []Job             `yaml:"jobs"`
 }
 
 // resolvedSettings is the merged result of defaults < config file < env < flags.
@@ -84,32 +77,57 @@ const (
 	defaultDaemon      = false
 )
 
-// loadSettings reads the sidecar: section from path.
-// Returns an empty sidecarSettings (all nil) when the file is missing or has
-// no sidecar: key — callers fall back to env vars and defaults.
-func loadSettings(path string) sidecarSettings {
+// setting describes one sidecar setting: its sidecar: key (also the flag
+// name), env var, built-in default (as text), and flag usage. Flags, env, the
+// config file, --help, and ensureSettings are all driven by this table.
+type setting struct {
+	key, env, def, usage string
+	isBool               bool
+}
+
+const configEnv = "GO_WAYBAR_SIDECAR_CONFIG"
+
+var settings = []setting{
+	{"log-level", "GO_WAYBAR_SIDECAR_LOG_LEVEL", defaultLogLevel, "log level: debug, info, warn, error", false},
+	{"log-output", "GO_WAYBAR_SIDECAR_LOG_OUTPUT", defaultLogOutput, "log destination: stdout, stderr, or a file path", false},
+	{"notify-level", "GO_WAYBAR_SIDECAR_NOTIFY_LEVEL", defaultNotifyLevel, "notification threshold: off, debug, info, warn, error", false},
+	{"no-generate", "GO_WAYBAR_SIDECAR_NO_GENERATE", strconv.FormatBool(defaultNoGenerate), "watch and reload waybar without generating config.jsonc/menus from config.yaml", true},
+	{"daemon", "GO_WAYBAR_SIDECAR_DAEMON", strconv.FormatBool(defaultDaemon), "fork to background (stdio is closed; combine with --log-output to keep logs)", true},
+}
+
+// loadSettings reads the sidecar: section from path. A missing file or an
+// absent section yields an empty map; unreadable or malformed YAML is an error
+// (the caller falls back to env vars and defaults).
+func loadSettings(path string) (map[string]string, error) {
 	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
-		return sidecarSettings{}
+		return nil, err
 	}
 	var raw rawConfig
 	if err := yaml.Unmarshal(b, &raw); err != nil {
-		return sidecarSettings{}
+		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
-	if raw.Sidecar == nil {
-		return sidecarSettings{}
-	}
-	return *raw.Sidecar
+	return raw.Sidecar, nil
+}
+
+// passedFlags returns the explicitly set flags of fs and their values.
+func passedFlags(fs *flag.FlagSet) map[string]string {
+	set := map[string]string{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = f.Value.String() })
+	return set
 }
 
 // resolveConfigPath applies: default configPath < GO_WAYBAR_SIDECAR_CONFIG < --config flag.
-func resolveConfigPath(f cliFlags, set map[string]bool) string {
+func resolveConfigPath(fs *flag.FlagSet) string {
 	path := configPath
-	if v, ok := os.LookupEnv("GO_WAYBAR_SIDECAR_CONFIG"); ok && v != "" {
+	if v := os.Getenv(configEnv); v != "" {
 		path = v
 	}
-	if set["config"] {
-		path = f.config
+	if v, ok := passedFlags(fs)["config"]; ok {
+		path = v
 	}
 	return resolvedPath(path)
 }
@@ -127,82 +145,40 @@ func parseBoolEnv(v string) (bool, bool) {
 	return b, err == nil
 }
 
-// resolveSettings applies: defaults < config file < env vars < CLI flags.
-func resolveSettings(f cliFlags, set map[string]bool, s sidecarSettings) resolvedSettings {
-	r := resolvedSettings{
-		logLevel:    defaultLogLevel,
-		logOutput:   defaultLogOutput,
-		notifyLevel: defaultNotifyLevel,
-		noGenerate:  defaultNoGenerate,
-		daemon:      defaultDaemon,
-	}
-
-	// Config file overrides defaults.
-	if s.LogLevel != nil {
-		r.logLevel = *s.LogLevel
-	}
-	if s.LogOutput != nil {
-		r.logOutput = *s.LogOutput
-	}
-	if s.NotifyLevel != nil {
-		r.notifyLevel = *s.NotifyLevel
-	}
-	if s.NoGenerate != nil {
-		r.noGenerate = *s.NoGenerate
-	}
-	if s.Daemon != nil {
-		r.daemon = *s.Daemon
-	}
-
-	// Env vars override config file.
-	if v, ok := os.LookupEnv("GO_WAYBAR_SIDECAR_LOG_LEVEL"); ok {
-		r.logLevel = v
-	}
-	if v, ok := os.LookupEnv("GO_WAYBAR_SIDECAR_LOG_OUTPUT"); ok {
-		r.logOutput = v
-	}
-	if v, ok := os.LookupEnv("GO_WAYBAR_SIDECAR_NOTIFY_LEVEL"); ok {
-		r.notifyLevel = v
-	}
-	if v, ok := os.LookupEnv("GO_WAYBAR_SIDECAR_NO_GENERATE"); ok {
-		if b, ok := parseBoolEnv(v); ok {
-			r.noGenerate = b
+// resolveSettings applies, per setting: defaults < config file < env vars <
+// CLI flags (only those actually passed). An invalid boolean from any source
+// is an error.
+func resolveSettings(fs *flag.FlagSet, file map[string]string) (resolvedSettings, error) {
+	passed := passedFlags(fs)
+	vals := make(map[string]string, len(settings))
+	for _, s := range settings {
+		v := s.def
+		if f, ok := file[s.key]; ok {
+			v = f
 		}
-	}
-	if v, ok := os.LookupEnv("GO_WAYBAR_SIDECAR_DAEMON"); ok {
-		if b, ok := parseBoolEnv(v); ok {
-			r.daemon = b
+		if e, ok := os.LookupEnv(s.env); ok {
+			v = e
 		}
+		if f, ok := passed[s.key]; ok {
+			v = f
+		}
+		if s.isBool {
+			b, ok := parseBoolEnv(v)
+			if !ok {
+				return resolvedSettings{}, fmt.Errorf("invalid boolean %q for %s", v, s.key)
+			}
+			v = strconv.FormatBool(b)
+		}
+		vals[s.key] = v
 	}
 
-	// CLI flags override env vars.
-	if set["log-level"] {
-		r.logLevel = f.logLevel
-	}
-	if set["log-output"] {
-		r.logOutput = f.logOutput
-	}
-	if set["notify-level"] {
-		r.notifyLevel = f.notifyLevel
-	}
-	if set["no-generate"] {
-		r.noGenerate = f.noGenerate
-	}
-	if set["daemon"] {
-		r.daemon = f.daemon
-	}
-
-	return r
-}
-
-// sidecarDefaults lists the five sidecar settings in display order.
-// Used by ensureSettings to fill absent keys with built-in defaults.
-var sidecarDefaults = []struct{ key, tag, value string }{
-	{"log-level", "!!str", defaultLogLevel},
-	{"log-output", "!!str", defaultLogOutput},
-	{"notify-level", "!!str", defaultNotifyLevel},
-	{"no-generate", "!!bool", strconv.FormatBool(defaultNoGenerate)},
-	{"daemon", "!!bool", strconv.FormatBool(defaultDaemon)},
+	return resolvedSettings{
+		logLevel:    vals["log-level"],
+		logOutput:   vals["log-output"],
+		notifyLevel: vals["notify-level"],
+		noGenerate:  vals["no-generate"] == "true",
+		daemon:      vals["daemon"] == "true",
+	}, nil
 }
 
 // ensureSettings fills any absent sidecar: keys in path with their built-in
@@ -257,13 +233,17 @@ func ensureSettings(path string) error {
 
 	// Append missing keys with their built-in defaults.
 	added := 0
-	for _, d := range sidecarDefaults {
+	for _, d := range settings {
 		if existing[d.key] {
 			continue
 		}
+		tag := "!!str"
+		if d.isBool {
+			tag = "!!bool"
+		}
 		sidecarMap.Content = append(sidecarMap.Content,
 			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: d.key},
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: d.tag, Value: d.value},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: d.def},
 		)
 		added++
 	}
@@ -312,33 +292,30 @@ func resolvedPath(p string) string {
 	return p
 }
 
-func ensureConfig() {
+func ensureConfig() error {
 	if err := os.MkdirAll(waybarDir, 0o755); err != nil {
-		logger.Error("failed to create waybar dir", "path", waybarDir, "err", err)
-		os.Exit(1)
+		return fmt.Errorf("create waybar dir %s: %w", waybarDir, err)
 	}
 
 	if err := os.MkdirAll(menuDir, 0o755); err != nil {
-		logger.Error("failed to create menu output dir", "path", menuDir, "err", err)
-		os.Exit(1)
+		return fmt.Errorf("create menu output dir %s: %w", menuDir, err)
 	}
 
 	if _, err := os.Stat(configPath); err == nil {
 		logger.Debug("config already exists", "path", configPath)
-		return
+		return nil
 	}
 
 	logger.Info("config not found, writing default", "path", configPath)
 
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		logger.Error("failed to create config dir", "path", filepath.Dir(configPath), "err", err)
-		os.Exit(1)
+		return fmt.Errorf("create config dir %s: %w", filepath.Dir(configPath), err)
 	}
 
 	if err := os.WriteFile(configPath, defaultConfig, 0o644); err != nil {
-		logger.Error("failed to write default config", "path", configPath, "err", err)
-		os.Exit(1)
+		return fmt.Errorf("write default config %s: %w", configPath, err)
 	}
+	return nil
 }
 
 func loadConfig() (Config, error) {

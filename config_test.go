@@ -316,3 +316,21 @@ func TestExpandIncludes_ApplicationsCategoriesInvalidMode(t *testing.T) {
 		t.Errorf("invalid mode = %v, want all behaviour", got)
 	}
 }
+
+func TestEnsureConfigReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "file")
+	if err := os.WriteFile(blocker, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	origWaybar, origMenu, origCfg := waybarDir, menuDir, configPath
+	t.Cleanup(func() { waybarDir, menuDir, configPath = origWaybar, origMenu, origCfg })
+	waybarDir = filepath.Join(dir, "waybar")
+	menuDir = filepath.Join(waybarDir, "menus")
+	configPath = filepath.Join(blocker, "config.yaml") // parent is a regular file
+
+	if err := ensureConfig(); err == nil {
+		t.Fatal("ensureConfig() = nil, want error when config dir cannot be created")
+	}
+}

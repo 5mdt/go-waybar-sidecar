@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -80,36 +79,21 @@ func TestNotifyHandlerEnabled(t *testing.T) {
 	}
 }
 
-type notifyCall struct {
-	urgency       byte
-	summary, body string
-	label, path   string
-}
-
-func stubSendNotification(t *testing.T) *[]notifyCall {
-	t.Helper()
-	origSend := sendNotification
-	t.Cleanup(func() { sendNotification = origSend })
-
-	var calls []notifyCall
-	sendNotification = func(urgency byte, summary, body, label, path string) error {
-		calls = append(calls, notifyCall{urgency, summary, body, label, path})
-		return nil
-	}
-	return &calls
+// newTestHandler returns a handler wired to a buffered queue the test reads.
+func newTestHandler(threshold slog.Level) (*notifyHandler, chan notification) {
+	q := make(chan notification, 4)
+	return &notifyHandler{threshold: threshold, queue: q}, q
 }
 
 func TestNotifyHandlerHandle(t *testing.T) {
-	calls := stubSendNotification(t)
-
-	h := &notifyHandler{threshold: slog.LevelWarn}
+	h, q := newTestHandler(slog.LevelWarn)
 
 	below := slog.NewRecord(time.Now(), slog.LevelInfo, "below threshold", 0)
 	if err := h.Handle(context.Background(), below); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(*calls) != 0 {
-		t.Fatalf("expected no calls for below-threshold record, got %v", *calls)
+	if len(q) != 0 {
+		t.Fatalf("expected nothing queued for below-threshold record, got %d", len(q))
 	}
 
 	rec := slog.NewRecord(time.Now(), slog.LevelError, "waybar failed to start", 0)
@@ -117,10 +101,10 @@ func TestNotifyHandlerHandle(t *testing.T) {
 	if err := h.Handle(context.Background(), rec); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(*calls) != 1 {
-		t.Fatalf("expected 1 call, got %d", len(*calls))
+	if len(q) != 1 {
+		t.Fatalf("expected 1 queued notification, got %d", len(q))
 	}
-	got := (*calls)[0]
+	got := <-q
 	if got.urgency != 2 {
 		t.Errorf("urgency = %v, want 2", got.urgency)
 	}
@@ -133,15 +117,13 @@ func TestNotifyHandlerHandle(t *testing.T) {
 }
 
 func TestNotifyHandlerHandleDefaultAction(t *testing.T) {
-	calls := stubSendNotification(t)
-
-	h := &notifyHandler{threshold: slog.LevelError}
+	h, q := newTestHandler(slog.LevelError)
 	rec := slog.NewRecord(time.Now(), slog.LevelError, "boom", 0)
 	if err := h.Handle(context.Background(), rec); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	got := (*calls)[0]
+	got := <-q
 	if got.label != "Open config" {
 		t.Errorf("label = %q, want %q", got.label, "Open config")
 	}
@@ -151,9 +133,7 @@ func TestNotifyHandlerHandleDefaultAction(t *testing.T) {
 }
 
 func TestNotifyHandlerHandleOverrideAction(t *testing.T) {
-	calls := stubSendNotification(t)
-
-	h := &notifyHandler{threshold: slog.LevelWarn}
+	h, q := newTestHandler(slog.LevelWarn)
 	rec := slog.NewRecord(time.Now(), slog.LevelWarn, "job failed", 0)
 	rec.AddAttrs(slog.String("name", "sync-mail"), notifyOpen("Show output", "/tmp/x"))
 
@@ -161,7 +141,7 @@ func TestNotifyHandlerHandleOverrideAction(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	got := (*calls)[0]
+	got := <-q
 	if got.label != "Show output" || got.path != "/tmp/x" {
 		t.Errorf("label/path = %q/%q, want %q/%q", got.label, got.path, "Show output", "/tmp/x")
 	}
@@ -173,19 +153,26 @@ func TestNotifyHandlerHandleOverrideAction(t *testing.T) {
 	}
 }
 
-func TestNotifyHandlerHandleSwallowsErrors(t *testing.T) {
-	origSend := sendNotification
-	defer func() { sendNotification = origSend }()
+func TestNotifyHandlerHandleFullQueueDoesNotBlock(t *testing.T) {
+	for name, q := range map[string]chan notification{
+		"full":  make(chan notification), // unbuffered, nobody reading
+		"unset": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := &notifyHandler{threshold: slog.LevelError, queue: q}
+			rec := slog.NewRecord(time.Now(), slog.LevelError, "boom", 0)
 
-	sendNotification = func(urgency byte, summary, body, label, path string) error {
-		return errors.New("notification bus unavailable")
-	}
-
-	h := &notifyHandler{threshold: slog.LevelError}
-	rec := slog.NewRecord(time.Now(), slog.LevelError, "boom", 0)
-
-	if err := h.Handle(context.Background(), rec); err != nil {
-		t.Fatalf("Handle should swallow sendNotification errors, got: %v", err)
+			done := make(chan error, 1)
+			go func() { done <- h.Handle(context.Background(), rec) }()
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatalf("Handle should return nil when dropping, got: %v", err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("Handle blocked on a full queue")
+			}
+		})
 	}
 }
 

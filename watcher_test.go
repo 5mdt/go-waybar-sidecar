@@ -4,8 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -252,7 +253,7 @@ func TestReloadKeepsPreviousConfigOnError(t *testing.T) {
 	doReload = func() { reloadCount++ }
 
 	cfg := Config{Waybar: map[string]any{"layer": "top"}}
-	reload(&cfg)
+	cfg = reload(cfg)
 
 	if _, ok := cfg.Waybar["layer"]; !ok {
 		t.Error("expected previous config to be kept after reload error")
@@ -262,31 +263,19 @@ func TestReloadKeepsPreviousConfigOnError(t *testing.T) {
 	}
 }
 
-func TestReloadConcurrent(t *testing.T) {
-	dir := t.TempDir()
-	file := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(file, []byte("waybar:\n  layer: top\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+func TestDebounceCollapsesCalls(t *testing.T) {
+	var n atomic.Int32
+	trigger := debounce(30*time.Millisecond, func() { n.Add(1) })
 
-	origConfigPath, origNoGenerate, origDoReload := configPath, noGenerate, doReload
-	origMenuDir, origOutJSON := menuDir, outJSON
-	configPath, noGenerate = file, false
-	menuDir, outJSON = filepath.Join(dir, "menus"), filepath.Join(dir, "config.jsonc")
-	doReload = func() {}
-	defer func() {
-		configPath, noGenerate, doReload = origConfigPath, origNoGenerate, origDoReload
-		menuDir, outJSON = origMenuDir, origOutJSON
-		jobs.restart(nil)
-	}()
-
-	var cfg Config
-	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
-		wg.Add(1)
-		go func() { defer wg.Done(); reload(&cfg) }()
+	for i := 0; i < 3; i++ {
+		trigger()
+		time.Sleep(5 * time.Millisecond)
 	}
-	wg.Wait()
+	time.Sleep(100 * time.Millisecond)
+
+	if got := n.Load(); got != 1 {
+		t.Errorf("callback ran %d times, want 1", got)
+	}
 }
 
 func TestNearestExisting(t *testing.T) {

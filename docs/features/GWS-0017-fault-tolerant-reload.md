@@ -32,10 +32,10 @@ output-write errors are logged and handled without crashing:
   the function returns without exiting.
 
 `watcher.go`:
-- New `reload(cfg *Config)` replaces the inline debounce body. When
-  `!noGenerate`, it calls `loadConfig()`; on error it logs
-  "reload failed, keeping previous config" and returns without touching `*cfg`
-  or regenerating. On success it updates `*cfg` and calls `generate(*cfg)`.
+- `reload(cfg Config) Config`. When `!noGenerate`, it calls `loadConfig()`;
+  on error it logs "reload failed, keeping previous config" and returns `cfg`
+  unchanged without regenerating. On success it generates from and returns
+  the new config.
 
 `main.go`:
 - `run()` startup: if `loadConfig()` returns an error, it logs the error and
@@ -64,8 +64,8 @@ None (behavioral change only).
 - `parseConfig(defaultConfig)`: succeeds (guards the startup fallback).
 - `loadConfig()` with a missing/unreadable file: returns a non-nil error
   instead of exiting.
-- `reload(cfg)` with `configPath` pointing at a broken file: `*cfg` is
-  unchanged and `doReload`/`generate` are not invoked (no regeneration).
+- `reload(cfg)` with `configPath` pointing at a broken file: the returned
+  config equals `cfg` and `doReload`/`generate` are not invoked (no regeneration).
 
 ### Integration Testing
 

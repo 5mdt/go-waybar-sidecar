@@ -2,10 +2,11 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -33,8 +34,8 @@ func setupPidTest(t *testing.T) *syncBuffer {
 	sidecarStopPoll = 5 * time.Millisecond
 	t.Cleanup(func() { sidecarStopGrace, sidecarStopPoll = origGrace, origPoll })
 
-	origKillFn, origSidecarPIDsFn := killFn, sidecarPIDsFn
-	t.Cleanup(func() { killFn, sidecarPIDsFn = origKillFn, origSidecarPIDsFn })
+	origKillFn := killFn
+	t.Cleanup(func() { killFn = origKillFn })
 
 	t.Cleanup(func() {
 		if instanceLock != nil {
@@ -65,41 +66,32 @@ func TestIsRealProc_NonexistentPID(t *testing.T) {
 	}
 }
 
-func TestSidecarPIDs_ExcludesSelf(t *testing.T) {
-	for _, pid := range sidecarPIDs() {
-		if pid == os.Getpid() {
-			t.Errorf("sidecarPIDs() included own pid %d", pid)
-		}
-	}
-}
-
 func TestAcquireInstanceLock_Exclusive(t *testing.T) {
 	setupPidTest(t)
 
-	locked, err := acquireInstanceLock()
-	if err != nil {
-		t.Fatalf("first acquireInstanceLock() error = %v", err)
+	f, _, err := acquireInstanceLock()
+	if err != nil || f == nil {
+		t.Fatalf("first acquireInstanceLock() = %v, %v; want lock", f, err)
 	}
-	if !locked {
-		t.Fatal("first acquireInstanceLock() = false, want true")
+	defer f.Close()
+
+	got, err := os.ReadFile(filepath.Join(pidDir, "waybar-sidecar.lock"))
+	if err != nil || strings.TrimSpace(string(got)) != strconv.Itoa(os.Getpid()) {
+		t.Errorf("lock file = %q, %v; want own pid %d", got, err, os.Getpid())
 	}
 
-	// A second, independent acquisition attempt on the same path (separate
-	// fd) must see the lock as held, not error.
-	path := filepath.Join(pidDir, "waybar-sidecar.lock")
-	fd, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		t.Fatal(err)
+	// A second, independent acquisition (separate fd) must see the lock as
+	// held, report the holder, and not error or clobber the file.
+	f2, holder, err := acquireInstanceLock()
+	if err != nil || f2 != nil {
+		t.Fatalf("second acquireInstanceLock() = %v, %v; want nil, nil", f2, err)
 	}
-	defer fd.Close()
-
-	err = syscall.Flock(int(fd.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
-	if !errors.Is(err, syscall.EWOULDBLOCK) {
-		t.Errorf("expected second flock to be EWOULDBLOCK, got %v", err)
+	if holder != os.Getpid() {
+		t.Errorf("holder = %d, want %d", holder, os.Getpid())
 	}
 }
 
-func TestTerminateSidecars_ExitsAfterSIGTERM(t *testing.T) {
+func TestTerminatePIDs_ExitsAfterSIGTERM(t *testing.T) {
 	setupPidTest(t)
 
 	var mu sync.Mutex
@@ -123,7 +115,7 @@ func TestTerminateSidecars_ExitsAfterSIGTERM(t *testing.T) {
 		return nil
 	}
 
-	terminateSidecars([]int{4242})
+	terminatePIDs([]int{4242})
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -137,7 +129,7 @@ func TestTerminateSidecars_ExitsAfterSIGTERM(t *testing.T) {
 	}
 }
 
-func TestTerminateSidecars_EscalatesToSIGKILL(t *testing.T) {
+func TestTerminatePIDs_EscalatesToSIGKILL(t *testing.T) {
 	buf := setupPidTest(t)
 
 	var mu sync.Mutex
@@ -152,7 +144,7 @@ func TestTerminateSidecars_EscalatesToSIGKILL(t *testing.T) {
 		return nil
 	}
 
-	terminateSidecars([]int{4242})
+	terminatePIDs([]int{4242})
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -176,44 +168,61 @@ func TestTerminateSidecars_EscalatesToSIGKILL(t *testing.T) {
 	}
 }
 
-func TestEnsureSingleInstance_NoOthers(t *testing.T) {
+func TestEnsureSingleInstance_FreeLock(t *testing.T) {
 	setupPidTest(t)
-
-	sidecarPIDsFn = func() []int { return nil }
 
 	signaled := false
 	killFn = func(pid int, sig syscall.Signal) error {
-		if sig != 0 {
-			signaled = true
-		}
+		signaled = true
 		return nil
 	}
 
 	ensureSingleInstance()
 
 	if signaled {
-		t.Error("expected no signals sent when no other instances are running")
+		t.Error("expected no signals sent when the lock is free")
 	}
 	if instanceLock == nil {
 		t.Error("expected the instance lock to be acquired")
 	}
 }
 
-func TestEnsureSingleInstance_TerminatesMultipleStrays(t *testing.T) {
-	setupPidTest(t)
+// holdLock takes the lock file through an independent fd and writes content
+// into it, like another running instance would.
+func holdLock(t *testing.T, content string) *os.File {
+	t.Helper()
+	if err := os.MkdirAll(pidDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fd, err := os.OpenFile(filepath.Join(pidDir, "waybar-sidecar.lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { fd.Close() })
+	if err := syscall.Flock(int(fd.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fd.WriteString(content); err != nil {
+		t.Fatal(err)
+	}
+	return fd
+}
 
-	sidecarPIDsFn = func() []int { return []int{111, 222} }
+func TestEnsureSingleInstance_TakesOverHolder(t *testing.T) {
+	setupPidTest(t)
+	fd := holdLock(t, "4242\n")
 
 	var mu sync.Mutex
-	termed := map[int]bool{}
+	var termed []int
 	killFn = func(pid int, sig syscall.Signal) error {
 		mu.Lock()
 		defer mu.Unlock()
 		if sig == syscall.SIGTERM {
-			termed[pid] = true
+			termed = append(termed, pid)
+			fd.Close() // the incumbent exits and releases the lock
 		}
-		if sig == 0 {
-			return syscall.ESRCH // report gone immediately after SIGTERM
+		if sig == 0 && len(termed) > 0 {
+			return syscall.ESRCH
 		}
 		return nil
 	}
@@ -222,34 +231,29 @@ func TestEnsureSingleInstance_TerminatesMultipleStrays(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
-	if !termed[111] || !termed[222] {
-		t.Errorf("expected both stray pids to be SIGTERM'd, got %v", termed)
+	if len(termed) != 1 || termed[0] != 4242 {
+		t.Errorf("SIGTERM'd pids = %v, want [4242]", termed)
+	}
+	if instanceLock == nil {
+		t.Fatal("expected the instance lock to be acquired")
+	}
+	got, _ := os.ReadFile(filepath.Join(pidDir, "waybar-sidecar.lock"))
+	if strings.TrimSpace(string(got)) != strconv.Itoa(os.Getpid()) {
+		t.Errorf("lock file = %q, want own pid", got)
 	}
 }
 
 func TestEnsureSingleInstance_ProceedsWhenLockBusy(t *testing.T) {
 	buf := setupPidTest(t)
-
-	sidecarPIDsFn = func() []int { return nil }
+	holdLock(t, "")
 	killFn = func(pid int, sig syscall.Signal) error { return nil }
-
-	// Hold the lock via an independent fd for the whole test.
-	if err := os.MkdirAll(pidDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(pidDir, "waybar-sidecar.lock")
-	fd, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer fd.Close()
-	if err := syscall.Flock(int(fd.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		t.Fatal(err)
-	}
 
 	ensureSingleInstance()
 
-	if !bytes.Contains([]byte(buf.String()), []byte("lock")) {
+	if !strings.Contains(buf.String(), "lock") {
 		t.Errorf("expected a log mentioning the lock, got: %s", buf.String())
+	}
+	if instanceLock != nil {
+		t.Error("expected no lock to be held")
 	}
 }

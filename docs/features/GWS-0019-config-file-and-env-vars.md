@@ -19,29 +19,32 @@ file to avoid a chicken-and-egg problem, but it does accept an env var.
 ## Implementation
 
 `config.go`:
-- `sidecarSettings` — pointer-field struct (`*string`/`*bool`) so a missing
-  YAML key is `nil` (absent) rather than a zero value.
-- `rawConfig.Sidecar *sidecarSettings` — unmarshals the `sidecar:` top-level
-  key alongside the existing `waybar:` key.
-- `loadSettings(path string) sidecarSettings` — reads the config file; returns
-  an empty struct (no error) when the file is missing (first run) or has no
-  `sidecar:` key.
-- `resolveConfigPath(f cliFlags, set map[string]bool) string` — applies the
-  two-source precedence for the config path: default → env
-  (`GO_WAYBAR_SIDECAR_CONFIG`) → CLI flag (`--config`).
-- `resolveSettings(f cliFlags, set map[string]bool, s sidecarSettings) resolvedSettings`
-  — applies four-source precedence for the other five settings. Env vars for
-  booleans accept `true/false/yes/no/1/0` (case-insensitive); `yes`/`no` extend `strconv.ParseBool`; invalid
-  values are silently ignored (config-file or default takes effect).
+- `settings` — one table row per setting: key, env var, default (string), flag
+  usage, `isBool`. Flags, env lookup, file lookup, `--help` text, and the
+  GWS-0020 defaults are all driven by it, so adding a setting is one row.
+- `rawConfig.Sidecar map[string]string` — the `sidecar:` top-level key next
+  to `waybar:`; scalars (including YAML `true`) decode to their text.
+- `loadSettings(path string) (map[string]string, error)` — reads the
+  `sidecar:` section. A missing file (first run) or absent key gives `nil, nil`;
+  unreadable or malformed YAML returns the error.
+- `resolveConfigPath(fs *flag.FlagSet) string` — default → env
+  (`GO_WAYBAR_SIDECAR_CONFIG`) → `--config` if passed.
+- `resolveSettings(fs *flag.FlagSet, file map[string]string) (resolvedSettings, error)`
+  — for each table row takes the last of default, file, env, flag (flag only
+  if passed, found via `fs.Visit`). Booleans accept `true/false/yes/no/1/0`
+  (case-insensitive; `yes`/`no` extend `strconv.ParseBool`); an invalid
+  boolean from any source is an error.
 
 `main.go`:
-- `parseFlags()` returns `(cliFlags, map[string]bool)`. The set is built via
-  `flag.Visit` after `flag.Parse()` so only explicitly-passed flags win over
-  env/file.
+- `newFlagSet()` registers one flag per table row plus `--config`.
+  `--help` prints the flag defaults from the flag set, then env vars and the
+  `sidecar:` block generated from the table.
 - `main()` applies the resolution order:
   1. `resolveConfigPath` to set `configPath`.
-  2. `loadSettings(configPath)` (tolerates missing file).
-  3. `resolveSettings` for the remaining five values.
+  2. `loadSettings(configPath)`; on error it logs a warning and continues on
+     defaults.
+  3. `resolveSettings`; on error it logs and exits 1 (as for an invalid
+     level).
 - `forkDetach()` sets `GO_WAYBAR_SIDECAR_FORKED=1` in the child's environment.
   The daemon check becomes `if resolved.daemon && os.Getenv("GO_WAYBAR_SIDECAR_FORKED") == ""`
   so that a `daemon: true` in the config file or `GO_WAYBAR_SIDECAR_DAEMON=1`
@@ -89,12 +92,14 @@ All keys are optional; omitted keys fall back to the defaults above.
 
 ### Unit Testing
 
-- `loadSettings`: valid `sidecar:` section parses correctly; missing file →
-  empty struct; file without `sidecar:` key → all-nil fields.
-- `resolveSettings` (table-driven): default-only, file-overrides-default,
-  env-overrides-file, flag-overrides-env for each setting.
+- `loadSettings`: valid `sidecar:` section (including YAML `true` and `yes`
+  booleans) parses correctly; missing file or absent key → nil map, no error;
+  malformed YAML → error.
+- `resolveSettings`: default-only, file-overrides-default, env-overrides-file,
+  flag-overrides-env for each setting.
 - `resolveConfigPath`: default → env → flag precedence.
-- Bool env parsing: `true/false/yes/no/1/0` accepted; invalid value ignored.
+- Bool parsing: `true/false/yes/no/1/0` accepted from env; an invalid
+  boolean from env, file, or flag is an error.
 
 ### Integration Testing
 

@@ -29,7 +29,7 @@ a replacement, which itself became a new zombie.
   guarded by a mutex. Package-level `var waybar waybarProc` (mirrors `var jobs
   jobRunner` in `cron.go`).
 - `start() error`: `exec.Command("waybar")` with the existing
-  `SysProcAttr{Setsid: true}` (own session, survives sidecar signals), then
+  `SysProcAttr{Setsid: true}` (own session, shielded from terminal signals sent to the sidecar's group; the sidecar stops it on shutdown), then
   `Start()`. A goroutine calls `cmd.Wait()` - this reaps the child, so it
   never becomes a zombie - then closes `done` and calls `onExit`.
 - `alive() bool`: `true` iff a process was started and its `done` channel is

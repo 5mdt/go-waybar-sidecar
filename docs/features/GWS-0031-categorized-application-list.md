@@ -13,6 +13,8 @@ It is rescanned on every config load, like `applications:plain`.
 `desktop.go`:
 - `desktopEntry.categories []string`: `Categories=` split on `;`, trimmed,
   empty parts dropped. `scanApplications()` copies it to `MenuItem.Categories`.
+
+`categories.go`:
 - `mainCategories`: the main categories and their labels — AudioVideo
   ("Audio & Video"), Development, Education, Game ("Games"), Graphics,
   Network, Office, Science, Settings, System, Utility. Other values (`GTK`,

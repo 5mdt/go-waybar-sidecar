@@ -10,7 +10,6 @@
 - [GWS-0006. Waybar reload via SIGUSR2](features/GWS-0006-waybar-reload-via-sigusr2.md) - `#reload` `#process-lifecycle`
 - [GWS-0007. Waybar cold start fallback](features/GWS-0007-waybar-cold-start-fallback.md) - `#reload` `#process-lifecycle`
 - [GWS-0008. Single-instance enforcement with takeover](features/GWS-0008-single-instance-enforcement-with-takeover.md) - `#process-lifecycle` `#filesystem`
-- [GWS-0009. PID file tracking](features/GWS-0009-pid-file-tracking.md) - `#process-lifecycle`
 - [GWS-0010. Daemon mode](features/GWS-0010-daemon-mode.md) - `#process-lifecycle` `#cli`
 - [GWS-0011. Configurable logging](features/GWS-0011-configurable-logging.md) - `#logging` `#cli`
 - [GWS-0012. Graceful shutdown on signals](features/GWS-0012-graceful-shutdown-on-signals.md) - `#process-lifecycle`
@@ -41,7 +40,7 @@
 - `#config-generation`: GWS-0001, GWS-0002, GWS-0004, GWS-0015, GWS-0016, GWS-0018, GWS-0023, GWS-0024, GWS-0028, GWS-0029, GWS-0030, GWS-0031, GWS-0032
 - `#menu`: GWS-0002, GWS-0003, GWS-0015, GWS-0023, GWS-0024, GWS-0028, GWS-0029, GWS-0030, GWS-0031, GWS-0032
 - `#reload`: GWS-0005, GWS-0006, GWS-0007, GWS-0016, GWS-0017, GWS-0022, GWS-0027
-- `#process-lifecycle`: GWS-0006, GWS-0007, GWS-0008, GWS-0009, GWS-0010, GWS-0012, GWS-0017, GWS-0022, GWS-0027
+- `#process-lifecycle`: GWS-0006, GWS-0007, GWS-0008, GWS-0010, GWS-0012, GWS-0017, GWS-0022, GWS-0027
 - `#logging`: GWS-0011, GWS-0013, GWS-0026
 - `#cli`: GWS-0010, GWS-0011, GWS-0014, GWS-0016, GWS-0019
 - `#filesystem`: GWS-0008, GWS-0021, GWS-0028, GWS-0031

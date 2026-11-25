@@ -13,16 +13,16 @@ the invoking terminal, and lets the foreground process exit immediately.
 - `main()` parses `--daemon`. If set, calls `forkDetach()` and returns
   immediately (does not call `run()`).
 - `forkDetach()`:
-  - Rebuilds `os.Args[1:]` with `--daemon`/`-daemon` stripped, so the child
-    doesn't re-fork.
-  - Runs `os.Args[0]` (the same binary) with those args via `exec.Command`.
+  - Runs `os.Args[0]` (the same binary) with `os.Args[1:]` via
+    `exec.Command`; the child doesn't re-fork because
+    `GO_WAYBAR_SIDECAR_FORKED=1` is set (GWS-0019).
   - Sets `SysProcAttr{Setsid: true}` to detach from the controlling terminal
     and `Stdin`/`Stdout`/`Stderr` to `nil` (closed), so the child's stdio is
     not tied to the parent's.
   - Starts the child and logs its PID ("forked to background"); does not
     wait for it.
-- The child process runs `main()` again without `--daemon`, so it proceeds to
-  `run()` normally. Since stdio is closed, `--log-output` should be set to a
+- The child process runs `main()` again, sees `GO_WAYBAR_SIDECAR_FORKED`, and proceeds
+  to `run()` normally. Since stdio is closed, `--log-output` should be set to a
   file path (or `stderr`/redirected) for logs to be visible (GWS-0011).
 
 ## Configuration
@@ -43,8 +43,7 @@ the invoking terminal, and lets the foreground process exit immediately.
 
 ### Unit Testing
 
-- `forkDetach()` argument rebuilding: assert `--daemon`/`-daemon` is removed
-  from the args passed to the child while other flags are preserved.
+- None.
 
 ### Integration Testing
 

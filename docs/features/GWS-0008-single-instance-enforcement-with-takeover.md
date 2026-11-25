@@ -28,9 +28,8 @@ written the pidfile.
   matches unrelated processes whose command line merely mentions the name.
   A `/proc/<pid>/exe` scan is exact.
 - `isRealProc(pid int, exeSuffix string) bool`: live (non-zombie, via
-  `/proc/<pid>/status`) and `/proc/<pid>/exe` ends in `exeSuffix`. Extracted
-  from what was `waybar.go`'s `isRealWaybar`, which is now
-  `isRealProc(pid, "/waybar")` — same behavior, shared implementation.
+  `/proc/<pid>/status`) and `/proc/<pid>/exe` ends in `exeSuffix`. Shared
+  with `waybarPIDs()` as `isRealProc(pid, "/waybar")`.
 - `terminateSidecars(pids []int)`: sends `SIGTERM` to each pid, polls
   (`sidecarStopPoll`, 100ms) for up to `sidecarStopGrace` (5s) for all to
   exit, then sends `SIGKILL` to any still alive (logged at warn). Uses
@@ -48,8 +47,6 @@ written the pidfile.
      to `sidecarStopGrace` (the terminated incumbent is exiting and will
      release it shortly). If still busy after that, log a warning and
      proceed unlocked rather than hang forever.
-- The pidfile (`waybar-sidecar.pid`, GWS-0009) is no longer read by this
-  logic; `savePID()` still writes it afterwards, informationally.
 
 ## Configuration
 

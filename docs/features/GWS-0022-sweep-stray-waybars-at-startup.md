@@ -18,7 +18,8 @@ only ever the one it started.
 
 `waybar.go` `sweepStrayWaybars()`:
 - `waybarPIDs()` enumerates all PIDs from `pgrep -x waybar`, filtered by
-  `isRealWaybar()` (non-zombie, `/proc/<pid>/exe` ends in `/waybar`).
+  `isRealProc(pid, "/waybar")` (non-zombie, `/proc/<pid>/exe` ends in
+  `/waybar`).
 - Sends `SIGTERM` to every one found. Graceful only; no `SIGKILL` escalation
   (mirrors `ensureSingleInstance` in `pid.go`) - these are pre-existing
   processes, not ones the sidecar is actively supervising, so there is no
@@ -26,7 +27,7 @@ only ever the one it started.
   instance" per PID.
 
 Called once, from `main.go` `run()` at startup, after `ensureSingleInstance()`
-/ `savePID()` and before the first `generate()`/`reloadWaybar()` - so
+and before the first `generate()`/`reloadWaybar()` - so
 pre-existing strays are cleared before the sidecar starts its own instance.
 
 ## Configuration

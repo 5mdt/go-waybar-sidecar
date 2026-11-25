@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 
@@ -76,22 +77,13 @@ func newNotifier(appName string) (n *notifier, ok bool) {
 	if err := obj.Call(notifyBusName+".GetCapabilities", 0).Store(&caps); err != nil {
 		return nil, false
 	}
-	if !containsString(caps, "actions") {
+	if !slices.Contains(caps, "actions") {
 		return nil, false
 	}
 
 	n = &notifier{conn: conn, obj: obj, appName: appName, pending: make(map[uint32]string)}
 	n.listen()
 	return n, true
-}
-
-func containsString(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }
 
 // listen starts a goroutine that receives ActionInvoked/NotificationClosed
@@ -193,7 +185,6 @@ func parseNotifyLevel(s string) (level slog.Level, enabled bool, err error) {
 // a missing or broken notification daemon.
 type notifyHandler struct {
 	threshold slog.Level
-	appName   string
 	attrs     []slog.Attr
 }
 
@@ -237,7 +228,6 @@ func (h *notifyHandler) Handle(_ context.Context, r slog.Record) error {
 func (h *notifyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &notifyHandler{
 		threshold: h.threshold,
-		appName:   h.appName,
 		attrs:     append(append([]slog.Attr{}, h.attrs...), attrs...),
 	}
 }

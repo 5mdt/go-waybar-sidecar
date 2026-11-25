@@ -102,7 +102,7 @@ func stubSendNotification(t *testing.T) *[]notifyCall {
 func TestNotifyHandlerHandle(t *testing.T) {
 	calls := stubSendNotification(t)
 
-	h := &notifyHandler{threshold: slog.LevelWarn, appName: "go-waybar-sidecar"}
+	h := &notifyHandler{threshold: slog.LevelWarn}
 
 	below := slog.NewRecord(time.Now(), slog.LevelInfo, "below threshold", 0)
 	if err := h.Handle(context.Background(), below); err != nil {
@@ -135,7 +135,7 @@ func TestNotifyHandlerHandle(t *testing.T) {
 func TestNotifyHandlerHandleDefaultAction(t *testing.T) {
 	calls := stubSendNotification(t)
 
-	h := &notifyHandler{threshold: slog.LevelError, appName: "go-waybar-sidecar"}
+	h := &notifyHandler{threshold: slog.LevelError}
 	rec := slog.NewRecord(time.Now(), slog.LevelError, "boom", 0)
 	if err := h.Handle(context.Background(), rec); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -153,7 +153,7 @@ func TestNotifyHandlerHandleDefaultAction(t *testing.T) {
 func TestNotifyHandlerHandleOverrideAction(t *testing.T) {
 	calls := stubSendNotification(t)
 
-	h := &notifyHandler{threshold: slog.LevelWarn, appName: "go-waybar-sidecar"}
+	h := &notifyHandler{threshold: slog.LevelWarn}
 	rec := slog.NewRecord(time.Now(), slog.LevelWarn, "job failed", 0)
 	rec.AddAttrs(slog.String("name", "sync-mail"), notifyOpen("Show output", "/tmp/x"))
 
@@ -181,7 +181,7 @@ func TestNotifyHandlerHandleSwallowsErrors(t *testing.T) {
 		return errors.New("notification bus unavailable")
 	}
 
-	h := &notifyHandler{threshold: slog.LevelError, appName: "go-waybar-sidecar"}
+	h := &notifyHandler{threshold: slog.LevelError}
 	rec := slog.NewRecord(time.Now(), slog.LevelError, "boom", 0)
 
 	if err := h.Handle(context.Background(), rec); err != nil {

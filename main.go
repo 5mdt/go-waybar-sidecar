@@ -147,7 +147,6 @@ func run() {
 	)
 
 	ensureSingleInstance()
-	savePID("waybar-sidecar", os.Getpid())
 	sweepStrayWaybars()
 
 	var cfg Config
@@ -206,19 +205,12 @@ func buildLogger(level slog.Level, output string, notifyLevel slog.Level, notify
 	}
 	sendNotification = n.send
 
-	notify := &notifyHandler{threshold: notifyLevel, appName: notifyAppName}
+	notify := &notifyHandler{threshold: notifyLevel}
 	return slog.New(&multiHandler{handlers: []slog.Handler{textHandler, notify}}), nil
 }
 
 func forkDetach() {
-	args := make([]string, 0, len(os.Args))
-	for _, a := range os.Args[1:] {
-		if a != "--daemon" && a != "-daemon" {
-			args = append(args, a)
-		}
-	}
-
-	cmd := exec.Command(os.Args[0], args...)
+	cmd := exec.Command(os.Args[0], os.Args[1:]...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Stdin = nil
 	cmd.Stdout = nil

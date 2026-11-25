@@ -166,16 +166,3 @@ func ensureSingleInstance() {
 		time.Sleep(sidecarStopPoll)
 	}
 }
-
-func savePID(name string, pid int) {
-	if err := os.MkdirAll(pidDir, 0o755); err != nil {
-		logger.Error("failed to create pid dir", "path", pidDir, "err", err)
-		return
-	}
-	path := filepath.Join(pidDir, name+".pid")
-	if err := os.WriteFile(path, []byte(fmt.Sprintf("%d\n", pid)), 0o644); err != nil {
-		logger.Error("failed to write pid file", "path", path, "err", err)
-		return
-	}
-	logger.Debug("pid saved", "name", name, "pid", pid, "path", path)
-}

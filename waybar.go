@@ -228,10 +228,6 @@ func sweepStrayWaybars() {
 	}
 }
 
-func isRealWaybar(pid int) bool {
-	return isRealProc(pid, "/waybar")
-}
-
 // waybarPIDs returns all PIDs of valid waybar processes (non-zombie, correct exe).
 func waybarPIDs() []int {
 	out, err := exec.Command("pgrep", "-x", "waybar").Output()
@@ -244,7 +240,7 @@ func waybarPIDs() []int {
 		if err != nil || pid == 0 {
 			continue
 		}
-		if isRealWaybar(pid) {
+		if isRealProc(pid, "/waybar") {
 			pids = append(pids, pid)
 		}
 	}

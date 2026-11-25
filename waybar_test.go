@@ -416,12 +416,12 @@ func TestSweepStrayWaybarsNoneNoop(t *testing.T) {
 	}
 }
 
-// --- isRealWaybar / waybarPIDs (kept for the startup sweep) ---
+// --- isRealProc(/waybar) / waybarPIDs (kept for the startup sweep) ---
 
-func TestIsRealWaybarSelf(t *testing.T) {
+func TestIsRealProcWaybarSelf(t *testing.T) {
 	// The test binary is not named "waybar", so this must be false.
-	if isRealWaybar(os.Getpid()) {
-		t.Error("expected isRealWaybar(self) = false (not named waybar)")
+	if isRealProc(os.Getpid(), "/waybar") {
+		t.Error("expected isRealProc(self, /waybar) = false (not named waybar)")
 	}
 }
 

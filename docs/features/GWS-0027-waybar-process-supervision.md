@@ -56,7 +56,7 @@ a replacement, which itself became a new zombie.
   through. Otherwise (or on fallthrough): `waybar.stop()` then `waybar.start()`;
   after `coldStartSettleDelay`, `alive()` decides between "waybar started" and
   "waybar failed to start". No poll loop - a single settle-and-check.
-- `isRealWaybar()` and `waybarPIDs()` (unchanged) are kept for
+- `waybarPIDs()` (unchanged) are kept for
   `sweepStrayWaybars()`, called once from `main.go` `run()` at startup: the
   sidecar owns nothing yet, so every `waybar` process found is a stray from a
   previous session (crash, or a takeover, see GWS-0008) and gets `SIGTERM`.

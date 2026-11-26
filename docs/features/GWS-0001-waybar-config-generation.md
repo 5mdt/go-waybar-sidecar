@@ -22,7 +22,11 @@ that Waybar consumes.
   - For each module name present in `menus` (see GWS-0015), removes its
     `menu_definition` field and sets `menu: "on-click"`, `menu-file:
     <path>`, and `menu-actions: <map>`.
-  - Encodes the result as indented JSON to `outJSON`.
+  - Encodes the result as indented JSON to `outJSON`, preceded by a header of `//` comment lines: "This file is generated, do not
+    edit manually", then `generation date` (RFC3339), `generation app name`,
+    `generation app version` (`main.version`, set by `-ldflags -X
+    main.version=...`, default `dev`) and `generation source` (`configPath`).
+    Waybar's JSONC parser accepts comments.
 
 ## Configuration
 
@@ -49,6 +53,8 @@ that Waybar consumes.
 - `writeJSON()` with a `menus` map containing an entry for `custom/Start`:
   assert the written JSON has `menu_definition` removed and
   `menu`/`menu-file`/`menu-actions` set for that module.
+- `writeJSON()`: assert `outJSON` starts with the header comment lines
+  (contains app name, version and config path) and the rest is valid JSON.
 - `writeJSON()` with a `menus` map that has no entry for a given module:
   assert that module is written unchanged (aside from `jsonSafe()`). See
   GWS-0015 for the multi-module case.

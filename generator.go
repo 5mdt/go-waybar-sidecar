@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/beevik/etree"
@@ -150,6 +151,18 @@ func jsonSafe(v any) any {
 	return v
 }
 
+// stripHeader drops the leading "//" comment lines written by writeJSON.
+func stripHeader(b []byte) []byte {
+	for bytes.HasPrefix(b, []byte("//")) {
+		_, rest, ok := bytes.Cut(b, []byte("\n"))
+		if !ok {
+			return nil
+		}
+		b = rest
+	}
+	return b
+}
+
 func writeJSON(waybar map[string]any, menus map[string]menuResult) {
 	waybar = jsonSafe(waybar).(map[string]any)
 	for name, res := range menus {
@@ -171,10 +184,18 @@ func writeJSON(waybar map[string]any, menus map[string]menuResult) {
 	}
 	data = append(data, '\n')
 
-	if prev, err := os.ReadFile(outJSON); err == nil && bytes.Equal(prev, data) {
+	// The header carries a timestamp, so only the body is compared.
+	if prev, err := os.ReadFile(outJSON); err == nil && bytes.Equal(stripHeader(prev), data) {
 		logger.Debug("JSON unchanged", "path", outJSON)
 		return
 	}
+	header := fmt.Sprintf("// This file is generated, do not edit manually\n"+
+		"// generation date: %s\n"+
+		"// generation app name: %s\n"+
+		"// generation app version: %s\n"+
+		"// generation source: %s\n",
+		time.Now().Format(time.RFC3339), appName, version, configPath)
+	data = append([]byte(header), data...)
 
 	if err := backupFile(outJSON); err != nil {
 		logger.Warn("failed to back up previous output", "path", outJSON, "err", err)

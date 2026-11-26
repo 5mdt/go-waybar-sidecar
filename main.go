@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+// version is set at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
+const appName = "go-waybar-sidecar"
+
 var logger *slog.Logger
 
 // reloadDebounce is how long file/profile events settle before one reload.

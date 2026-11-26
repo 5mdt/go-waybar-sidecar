@@ -1,6 +1,7 @@
 GO      := toolbox run go
 BIN     := go-waybar-sidecar
 BUILD   := build
+VERSION := $(shell git describe --tags --always --dirty)
 PREFIX  := $(HOME)/.local/bin
 
 .PHONY: all fmt test build install clean
@@ -14,7 +15,7 @@ test:
 	$(GO) test ./...
 
 build:
-	$(GO) build -o $(BUILD)/$(BIN) ./...
+	$(GO) build -ldflags "-X main.version=$(VERSION)" -o $(BUILD)/$(BIN) ./...
 
 install: test build
 	install -Dm755 $(BUILD)/$(BIN) $(PREFIX)/$(BIN)

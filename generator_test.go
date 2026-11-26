@@ -89,8 +89,15 @@ func TestBuildXMLAndWriteJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading output json: %v", err)
 	}
+	body := string(stripHeader(data))
+	header := strings.TrimSuffix(string(data), body)
+	for _, want := range []string{"// This file is generated, do not edit manually", "generation date: ", appName, version, configPath} {
+		if !strings.Contains(header, want) {
+			t.Errorf("header %q missing %q", header, want)
+		}
+	}
 	var out map[string]any
-	if err := json.Unmarshal(data, &out); err != nil {
+	if err := json.Unmarshal([]byte(body), &out); err != nil {
 		t.Fatalf("invalid json: %v", err)
 	}
 
@@ -130,16 +137,18 @@ func TestWriteJSONUnchangedIsNotRewritten(t *testing.T) {
 
 	cfg := map[string]any{"clock": map[string]any{"format": "same"}}
 	writeJSON(cfg, nil)
-	before, err := os.Stat(outJSON)
-	if err != nil {
+	// Replace the header with a different one: only the body is compared.
+	data, _ := os.ReadFile(outJSON)
+	if err := os.WriteFile(outJSON, append([]byte("// older header\n"), stripHeader(data)...), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	before, _ := os.Stat(outJSON)
 	time.Sleep(20 * time.Millisecond)
 	writeJSON(cfg, nil)
 
 	after, _ := os.Stat(outJSON)
 	if !after.ModTime().Equal(before.ModTime()) {
-		t.Error("identical output was rewritten")
+		t.Error("identical body with different header was rewritten")
 	}
 	if _, err := os.Stat(outJSON + ".bak"); !os.IsNotExist(err) {
 		t.Errorf("unexpected .bak for unchanged output, err = %v", err)

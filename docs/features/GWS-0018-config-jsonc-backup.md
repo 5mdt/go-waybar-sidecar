@@ -14,8 +14,8 @@ they don't trigger reload loops.
 ## Implementation
 
 `generator.go` `writeJSON()`:
-- Encodes the JSON to memory. If the bytes equal the current `outJSON`,
-  returns without writing.
+- Encodes the JSON to memory. If the bytes equal the current `outJSON`
+  after its leading `//` header lines, returns without writing.
 - Otherwise calls `backupFile(outJSON)`, then `writeFileAtomic(outJSON, data)`.
 - `backupFile(path)` copies `path` to `path + ".bak"` if `path` exists; if
   `path` does not exist, it is a no-op.
@@ -47,7 +47,8 @@ they don't trigger reload loops.
   content and the original path still exists.
 - `writeFileAtomic()`: assert content written, no `*.tmp*` file left behind.
 - `writeJSON()` twice with identical input: assert no `.bak` and the output
-  file is not rewritten (mtime unchanged).
+  file is not rewritten (mtime unchanged), even though the header timestamp
+  would differ.
 - `backupFile()` on a non-existent file: assert no error and no `.bak` file
   is created.
 - `isWatchedFile()`: assert false for `config.jsonc.bak` (covered by `TestIsWatchedFile` in `watcher_test.go`).

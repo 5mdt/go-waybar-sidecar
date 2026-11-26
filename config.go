@@ -186,7 +186,7 @@ func resolveSettings(fs *flag.FlagSet, file map[string]string) (resolvedSettings
 // changed. The file is only written (and backed up to path+".bak") when at
 // least one key is actually added. Comments and the waybar: section are
 // preserved via yaml.Node AST manipulation. Returns nil on missing/unreadable
-// files — callers fall back to the live defaults instead.
+// files - callers fall back to the live defaults instead.
 func ensureSettings(path string) error {
 	b, err := os.ReadFile(path)
 	if err != nil {

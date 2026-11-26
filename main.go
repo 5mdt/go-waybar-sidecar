@@ -39,7 +39,7 @@ func newFlagSet() *flag.FlagSet {
 
 func printUsage(fs *flag.FlagSet) {
 	out := os.Stdout
-	fmt.Fprintf(out, "waybar-sidecar — generates waybar config from %s and keeps waybar running.\n\nUsage:\n  waybar-sidecar [flags]\n\nFlags:\n", configPath)
+	fmt.Fprintf(out, "waybar-sidecar - generates waybar config from %s and keeps waybar running.\n\nUsage:\n  waybar-sidecar [flags]\n\nFlags:\n", configPath)
 	fs.SetOutput(out)
 	fs.PrintDefaults()
 

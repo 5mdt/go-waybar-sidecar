@@ -3,7 +3,7 @@
 ## Available Features
 
 - [GWS-0001. Waybar config generation (config.jsonc)](features/GWS-0001-waybar-config-generation.md) - `#config-generation`
-- [GWS-0002. Start menu XML generation (start.xml)](features/GWS-0002-start-menu-xml-generation.md) - `#config-generation` `#menu`
+- [GWS-0002. Menu XML generation (GtkMenu documents)](features/GWS-0002-start-menu-xml-generation.md) - `#config-generation` `#menu`
 - [GWS-0003. Nested submenu support](features/GWS-0003-nested-submenu-support.md) - `#menu`
 - [GWS-0004. Default config bootstrap](features/GWS-0004-default-config-bootstrap.md) - `#config` `#config-generation`
 - [GWS-0005. Live config reload on file changes](features/GWS-0005-live-config-reload-on-file-changes.md) - `#config` `#reload`
@@ -24,7 +24,7 @@
 - [GWS-0021. Symlink, hardlink, and mount handling](features/GWS-0021-symlink-hardlink-mount-handling.md) - `#config` `#filesystem`
 - [GWS-0022. Sweep stray waybar instances at startup](features/GWS-0022-sweep-stray-waybars-at-startup.md) - `#process-lifecycle` `#reload`
 - [GWS-0023. Menu separator items and duplicate element IDs](features/GWS-0023-menu-separator-duplicate-ids.md) - `#menu` `#config-generation`
-- [GWS-0024. Menu XML duplicate ID validation](features/GWS-0024-menu-xml-validation.md) - `#menu` `#config-generation`
+- [GWS-0024. Menu XML duplicate ID validation (deprecated, see GWS-0023)](features/GWS-0024-menu-xml-validation.md) - `#menu` `#config-generation`
 - [GWS-0025. Cron-like jobs runner](features/GWS-0025-cronlike-jobs-runner.md) - `#config` `#jobs`
 - [GWS-0026. Notification click actions](features/GWS-0026-notification-click-actions.md) - `#logging`
 - [GWS-0027. Waybar process supervision](features/GWS-0027-waybar-process-supervision.md) - `#process-lifecycle` `#reload`

@@ -272,7 +272,7 @@ func TestJobRunner_RestartStopsOldSet(t *testing.T) {
 	secondCount := callsByName["second"]
 	mu.Unlock()
 
-	// First job must have stopped — no new calls after restart.
+	// First job must have stopped - no new calls after restart.
 	if firstCountAfter != firstCount {
 		t.Errorf("first job fired %d more times after restart", firstCountAfter-firstCount)
 	}

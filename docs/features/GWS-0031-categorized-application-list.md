@@ -15,18 +15,18 @@ It is rescanned on every config load, like `applications:plain`.
   empty parts dropped. `scanApplications()` copies it to `MenuItem.Categories`.
 
 `categories.go`:
-- `mainCategories`: the main categories and their labels — AudioVideo
+- `mainCategories`: label-sorted slice of `{key, label, icon}` — AudioVideo
   ("Audio & Video"), Development, Education, Game ("Games"), Graphics,
   Network, Office, Science, Settings, System, Utility. Other values (`GTK`,
-  `WebBrowser`, ...) are ignored.
+  `WebBrowser`, ...) are ignored. `otherCategory` is the same shape.
 - `categorizeApps(apps []MenuItem, mode string) []MenuItem`: buckets apps by
   label and returns `MenuItem{Name: label, Children: apps}` per non-empty
-  bucket, sorted by label with "Other" last; apps keep name order.
+  bucket, in `mainCategories` order with "Other" last; apps keep name order.
   - `all` (default): app goes to every main category it lists.
   - `first`: app goes to the first main category in its `Categories=` order.
   - No main category: "Other".
   - Unknown `mode`: warning, treated as `all`.
-  - Each submenu gets `Icon` from `categoryIcons` (fixed freedesktop names,
+  - Each submenu gets the category's `icon` (fixed freedesktop names,
     e.g. Development -> `applications-development`), rendered per GWS-0032.
 
 `config.go`:
@@ -61,8 +61,8 @@ It is rescanned on every config load, like `applications:plain`.
 - `categorizeApps`: `all` (default) places a multi-category app in each
   category; `first` places it once; non-main or missing categories → "Other" (last); empty categories
   absent; labels and ordering as above.
-- `categoryIcons` has an entry for every `mainCategories` label and "Other";
-  `categorizeApps` sets it as the submenu `Icon`.
+- Every `mainCategories` entry and `otherCategory` has a label and icon;
+  `categorizeApps` sets the icon as the submenu `Icon`.
 - `expandIncludes`: `applications:categories` yields category submenus;
   invalid `mode` equals `all`.
 

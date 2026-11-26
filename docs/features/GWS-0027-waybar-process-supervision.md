@@ -47,11 +47,11 @@ a replacement, which itself became a new zombie.
   calls `scheduleAutoRestart`.
 - `scheduleAutoRestart()`: records the restart under a rate limit
   (`autoRestartMax` restarts per `autoRestartWindow`, both vars); if the
-  limit is exceeded, logs an error and gives up. Otherwise logs a warning and
-  calls `start()` again, holding `reloadMu` so it can't race a manual
-  `reloadWaybar()`.
+  limit is exceeded, logs an error and gives up. Otherwise logs a warning,
+  takes `reloadMu` so it can't race a manual `reloadWaybar()`, and calls
+  `start()` unless a live waybar is already tracked (a reload replaced it).
 - `reloadWaybar()` (called at the end of `generate()`, see GWS-0005/GWS-0006):
-  if `waybar.alive()`, sends `SIGUSR2` to `waybar.pid()` and, after
+  if `waybar.alive()`, sends `SIGUSR2` (via `killFn`) to `waybar.pid()` and, after
   `usr2SettleDelay`, checks `alive()` again - success returns, failure falls
   through. Otherwise (or on fallthrough): `waybar.stop()` then `waybar.start()`;
   after `coldStartSettleDelay`, `alive()` decides between "waybar started" and
@@ -102,6 +102,7 @@ a replacement, which itself became a new zombie.
 - `onExit` after a deliberate `stop()`: no auto-restart triggered.
 - `onExit` after an unprompted exit: `scheduleAutoRestart` runs and a new
   process starts.
+- `scheduleAutoRestart` with a live tracked waybar: no new process started.
 - `scheduleAutoRestart` beyond `autoRestartMax` within `autoRestartWindow`:
   no further restart attempted, error logged.
 - `reloadWaybar()` with a live child: SIGUSR2 path taken, no new process

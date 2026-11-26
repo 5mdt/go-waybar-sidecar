@@ -46,9 +46,6 @@ inactive.
   summary, formatted attributes as body) to its queue. When the queue is full
   the record is dropped, and `Handle` always returns `nil`, so a hung or
   absent notification daemon never blocks or breaks logging.
-- `multiHandler` is a `slog.Handler` that fans `Handle`/`WithAttrs`/
-  `WithGroup` out to multiple child handlers, gating each child on its own
-  `Enabled`.
 
 `main.go`:
 - New flag `--notify-level <level>` (default `"error"`): `off`, `debug`,
@@ -56,7 +53,7 @@ inactive.
 - `buildLogger(level, output, notifyLevel, notifyEnabled)` always builds the
   existing `TextHandler`. If `notifyEnabled`, it calls `newNotifier` and, if
   that succeeds, also builds a `notifyHandler` and combines both via
-  `multiHandler`. Otherwise the text handler is used unchanged. The queue is
+  `slog.NewMultiHandler` (each child is gated on its own `Enabled`). Otherwise the text handler is used unchanged. The queue is
   a `chan notification` (capacity 16) drained by one goroutine calling
   `notifier.send`; send errors are ignored.
 - If notifications are requested (`notifyEnabled == true`) but `newNotifier`

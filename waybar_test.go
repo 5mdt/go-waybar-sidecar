@@ -467,3 +467,37 @@ func TestWaybarPIDsNoneRunning(t *testing.T) {
 	// test host, consistent with the previous TestWaybarPIDNoneRunning).
 	_ = waybarPIDs()
 }
+
+func TestReloadWaybarUsr2UsesKillFn(t *testing.T) {
+	setupWaybarTest(t)
+	stubWaybarBinary(t)
+	if err := waybar.start(); err != nil {
+		t.Fatalf("start() error: %v", err)
+	}
+	time.Sleep(30 * time.Millisecond)
+
+	var sigs []syscall.Signal
+	killFn = func(pid int, sig syscall.Signal) error {
+		sigs = append(sigs, sig)
+		return nil
+	}
+	reloadWaybar()
+	if !slices.Contains(sigs, syscall.SIGUSR2) {
+		t.Errorf("SIGUSR2 not sent via killFn, got %v", sigs)
+	}
+}
+
+func TestScheduleAutoRestartSkipsWhenAlive(t *testing.T) {
+	setupWaybarTest(t)
+	stubWaybarBinary(t)
+	if err := waybar.start(); err != nil {
+		t.Fatalf("start() error: %v", err)
+	}
+	pid := waybar.pid()
+
+	waybar.scheduleAutoRestart()
+
+	if waybar.pid() != pid {
+		t.Errorf("a second waybar was started: pid %d, want %d", waybar.pid(), pid)
+	}
+}

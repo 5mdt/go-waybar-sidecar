@@ -73,7 +73,8 @@ func parseSchedule(j Job) (schedule, error) {
 // previous run finishes.
 func runJob(ctx context.Context, j Job, s schedule) {
 	for {
-		timer := time.NewTimer(max(0, s.Next(jobNow()).Sub(jobNow())))
+		now := jobNow()
+		timer := time.NewTimer(max(0, s.Next(now).Sub(now)))
 		select {
 		case <-ctx.Done():
 			timer.Stop()

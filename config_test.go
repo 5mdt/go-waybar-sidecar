@@ -139,24 +139,6 @@ jobs:
 	}
 }
 
-func TestExpandHome(t *testing.T) {
-	home := os.Getenv("HOME")
-	tests := map[string]string{
-		"~/.config/foo": home + "/.config/foo",
-		"~/":            home + "/",
-		"~":             home,
-		"/abs/path":     "/abs/path",
-		"relative/path": "relative/path",
-		"":              "",
-	}
-	for input, want := range tests {
-		got := expandHome(input)
-		if got != want {
-			t.Errorf("expandHome(%q) = %q, want %q", input, got, want)
-		}
-	}
-}
-
 func stubScanApplications(t *testing.T, items []MenuItem) {
 	t.Helper()
 	orig := scanApplications

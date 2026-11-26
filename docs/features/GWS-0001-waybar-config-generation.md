@@ -14,11 +14,11 @@ that Waybar consumes.
 - `generate()` calls `buildXML()` first (see GWS-0002/GWS-0015) to obtain a
   `map[string]menuResult` (one entry per menu-bearing module), then
   `writeJSON(cfg.Waybar, menus)`.
-- `sanitize()` recursively converts YAML-decoded `map[interface{}]interface{}`
-  values into `map[string]any` so the tree can be marshaled by
-  `encoding/json`.
+- `jsonSafe()` returns a deep copy of the tree with `map[interface{}]interface{}`
+  values (non-string YAML keys) converted to `map[string]any`, so it can be
+  marshaled by `encoding/json`. The input is never modified.
 - `writeJSON()`:
-  - Sanitizes `cfg.Waybar`.
+  - Copies `cfg.Waybar` via `jsonSafe()`; `cfg` is never modified.
   - For each module name present in `menus` (see GWS-0015), removes its
     `menu_definition` field and sets `menu: "on-click"`, `menu-file:
     <path>`, and `menu-actions: <map>`.
@@ -41,13 +41,16 @@ that Waybar consumes.
 
 ### Unit Testing
 
-- `sanitize()` with nested `map[interface{}]interface{}` and `[]any` values:
-  assert the result is composed entirely of `map[string]any`.
+- `jsonSafe()` with nested `map[interface{}]interface{}` and `[]any` values:
+  assert the result is composed entirely of `map[string]any`, and the input
+  is unchanged.
+- `writeJSON()`: assert `cfg.Waybar` still has `menu_definition` and no
+  `menu-file` afterwards.
 - `writeJSON()` with a `menus` map containing an entry for `custom/Start`:
   assert the written JSON has `menu_definition` removed and
   `menu`/`menu-file`/`menu-actions` set for that module.
 - `writeJSON()` with a `menus` map that has no entry for a given module:
-  assert that module is written unchanged (aside from sanitization). See
+  assert that module is written unchanged (aside from `jsonSafe()`). See
   GWS-0015 for the multi-module case.
 
 ### Integration Testing

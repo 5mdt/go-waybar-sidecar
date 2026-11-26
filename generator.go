@@ -26,9 +26,6 @@ var noGenerate bool
 // doReload is an indirection over reloadWaybar so tests can stub it.
 var doReload = reloadWaybar
 
-// validateMenu is an indirection over validateMenuDoc so tests can stub it.
-var validateMenu = validateMenuDoc
-
 // validateMenuDoc checks that all <object id="..."> elements in doc have
 // unique ids. Returns an error naming the first duplicate, or nil.
 func validateMenuDoc(doc *etree.Document) error {
@@ -106,7 +103,7 @@ func buildXML(cfg Config) map[string]menuResult {
 
 		doc.Indent(2)
 		path := filepath.Join(menuDir, menuFileName(name))
-		if err := validateMenu(doc); err != nil {
+		if err := validateMenuDoc(doc); err != nil {
 			logger.Error("invalid menu XML, skipping", "menu", name, "err", err, notifyOpen("Open menu", path))
 			continue
 		}
@@ -126,30 +123,35 @@ func buildXML(cfg Config) map[string]menuResult {
 	return results
 }
 
-func sanitize(v any) any {
+// jsonSafe returns a deep copy of v with map[any]any values (non-string YAML
+// keys) converted to map[string]any, so it can be marshaled by encoding/json.
+// v is never modified.
+func jsonSafe(v any) any {
 	switch v := v.(type) {
 	case map[interface{}]interface{}:
 		m := make(map[string]any, len(v))
 		for k, val := range v {
-			m[fmt.Sprintf("%v", k)] = sanitize(val)
+			m[fmt.Sprintf("%v", k)] = jsonSafe(val)
 		}
 		return m
 	case map[string]any:
+		m := make(map[string]any, len(v))
 		for k, val := range v {
-			v[k] = sanitize(val)
+			m[k] = jsonSafe(val)
 		}
-		return v
+		return m
 	case []any:
+		s := make([]any, len(v))
 		for i, val := range v {
-			v[i] = sanitize(val)
+			s[i] = jsonSafe(val)
 		}
-		return v
+		return s
 	}
 	return v
 }
 
 func writeJSON(waybar map[string]any, menus map[string]menuResult) {
-	waybar = sanitize(waybar).(map[string]any)
+	waybar = jsonSafe(waybar).(map[string]any)
 	for name, res := range menus {
 		mod, ok := waybar[name].(map[string]any)
 		if !ok {
@@ -184,49 +186,6 @@ func writeJSON(waybar map[string]any, menus map[string]menuResult) {
 	}
 
 	logger.Debug("JSON written", "path", outJSON)
-}
-
-// backupFile copies path to path+".bak" if it exists, preserving the
-// previous output in case the new one is broken. It is a no-op if path does
-// not exist.
-func backupFile(path string) error {
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path+".bak", data, 0o644)
-}
-
-// writeFileAtomic writes data to a temp file next to path and renames it into
-// place, so readers never see a missing or partial file. The parent
-// directory is created if needed.
-func writeFileAtomic(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(dir, filepath.Base(path)+".tmp*")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	_, err = f.Write(data)
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err == nil {
-		err = os.Chmod(tmp, 0o644)
-	}
-	if err == nil {
-		err = os.Rename(tmp, path)
-	}
-	if err != nil {
-		os.Remove(tmp)
-	}
-	return err
 }
 
 func addNode(parent *etree.Element, item MenuItem, actions map[string]string, n *int, withIcon bool) {

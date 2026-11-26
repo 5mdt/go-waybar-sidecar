@@ -233,7 +233,7 @@ func acceptEvent(name string, targets map[string]bool) bool {
 	if targets[name] {
 		return true
 	}
-	if name == outJSON || strings.HasPrefix(name, menuDir+string(filepath.Separator)) {
+	if name == outJSON || under(name, menuDir) {
 		return false
 	}
 	return isWatchedFile(name)
@@ -241,15 +241,15 @@ func acceptEvent(name string, targets map[string]bool) bool {
 
 func isWatchedFile(name string) bool {
 	ext := strings.ToLower(filepath.Ext(name))
-	if strings.HasPrefix(name, gwsDir+string(filepath.Separator)) {
+	if under(name, gwsDir) {
 		return ext == ".yaml" || ext == ".yml"
 	}
 	for _, dir := range appDirs() {
-		if strings.HasPrefix(name, dir+string(filepath.Separator)) {
+		if under(name, dir) {
 			return ext == ".desktop"
 		}
 	}
-	if strings.HasPrefix(name, waybarDir+string(filepath.Separator)) {
+	if under(name, waybarDir) {
 		return ext == ".json" || ext == ".jsonc" || ext == ".css"
 	}
 	return false

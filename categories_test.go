@@ -71,13 +71,9 @@ func TestCategorizeApps_NoOther(t *testing.T) {
 	}
 }
 func TestCategoryIcons(t *testing.T) {
-	labels := []string{otherCategory}
-	for _, l := range mainCategories {
-		labels = append(labels, l)
-	}
-	for _, l := range labels {
-		if categoryIcons[l] == "" {
-			t.Errorf("categoryIcons[%q] missing", l)
+	for _, c := range append([]category{otherCategory}, mainCategories...) {
+		if c.label == "" || c.icon == "" {
+			t.Errorf("category %+v missing label or icon", c)
 		}
 	}
 }

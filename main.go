@@ -222,7 +222,7 @@ func buildLogger(level slog.Level, output string, notifyLevel slog.Level, notify
 	}()
 
 	notify := &notifyHandler{threshold: notifyLevel, queue: q}
-	return slog.New(&multiHandler{handlers: []slog.Handler{textHandler, notify}}), nil
+	return slog.New(slog.NewMultiHandler(textHandler, notify)), nil
 }
 
 func forkDetach() error {

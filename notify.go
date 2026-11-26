@@ -170,10 +170,8 @@ func parseNotifyLevel(s string) (level slog.Level, enabled bool, err error) {
 	if strings.EqualFold(s, "off") {
 		return level, false, nil
 	}
-	if err := level.UnmarshalText([]byte(s)); err != nil {
-		return level, false, err
-	}
-	return level, true, nil
+	level, err = parseLogLevel(s)
+	return level, err == nil, err
 }
 
 // notifyHandler is a slog.Handler that queues records at or above its
@@ -236,48 +234,4 @@ func (h *notifyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 
 func (h *notifyHandler) WithGroup(_ string) slog.Handler {
 	return h
-}
-
-// multiHandler fans out log records to multiple handlers, each gated on its
-// own Enabled.
-type multiHandler struct {
-	handlers []slog.Handler
-}
-
-func (m *multiHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	for _, h := range m.handlers {
-		if h.Enabled(ctx, level) {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *multiHandler) Handle(ctx context.Context, r slog.Record) error {
-	var firstErr error
-	for _, h := range m.handlers {
-		if !h.Enabled(ctx, r.Level) {
-			continue
-		}
-		if err := h.Handle(ctx, r.Clone()); err != nil && firstErr == nil {
-			firstErr = err
-		}
-	}
-	return firstErr
-}
-
-func (m *multiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	handlers := make([]slog.Handler, len(m.handlers))
-	for i, h := range m.handlers {
-		handlers[i] = h.WithAttrs(attrs)
-	}
-	return &multiHandler{handlers: handlers}
-}
-
-func (m *multiHandler) WithGroup(name string) slog.Handler {
-	handlers := make([]slog.Handler, len(m.handlers))
-	for i, h := range m.handlers {
-		handlers[i] = h.WithGroup(name)
-	}
-	return &multiHandler{handlers: handlers}
 }

@@ -25,7 +25,7 @@ live-reload path (see GWS-0005) without restarting the sidecar.
   `intervalSchedule{d}` (`d` must be > 0); parses `schedule` with `cron.ParseStandard` from
   `github.com/robfig/cron/v3`. Returns an error if neither or both are set.
 - `runJob(ctx context.Context, j Job, s schedule)`: computes
-  `s.Next(jobNow())`, waits `next.Sub(jobNow())` via `time.NewTimer`, then
+  `s.Next(now)`, waits `next.Sub(now)` (`now` read once from `jobNow()`) via `time.NewTimer`, then
   calls `runOnce(ctx, j)` on each tick. Observes `ctx.Done()` while waiting
   and after each run to exit cleanly.
 - `runOnce(ctx, j)`: calls `jobExec(ctx, j.Command)`. On error, logs one warn

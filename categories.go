@@ -1,39 +1,27 @@
 package main
 
-import "sort"
+import "slices"
 
-// mainCategories maps freedesktop main category keys to menu labels.
-var mainCategories = map[string]string{
-	"AudioVideo":  "Audio & Video",
-	"Development": "Development",
-	"Education":   "Education",
-	"Game":        "Games",
-	"Graphics":    "Graphics",
-	"Network":     "Network",
-	"Office":      "Office",
-	"Science":     "Science",
-	"Settings":    "Settings",
-	"System":      "System",
-	"Utility":     "Utility",
+type category struct{ key, label, icon string }
+
+// mainCategories lists the freedesktop main categories in menu (label) order,
+// with their labels and freedesktop icon-theme names (GWS-0032).
+var mainCategories = []category{
+	{"AudioVideo", "Audio & Video", "applications-multimedia"},
+	{"Development", "Development", "applications-development"},
+	{"Education", "Education", "applications-education"},
+	{"Game", "Games", "applications-games"},
+	{"Graphics", "Graphics", "applications-graphics"},
+	{"Network", "Network", "applications-internet"},
+	{"Office", "Office", "applications-office"},
+	{"Science", "Science", "applications-science"},
+	{"Settings", "Settings", "preferences-desktop"},
+	{"System", "System", "applications-system"},
+	{"Utility", "Utility", "applications-utilities"},
 }
 
-const otherCategory = "Other"
-
-// categoryIcons maps category labels to freedesktop icon-theme names (GWS-0032).
-var categoryIcons = map[string]string{
-	"Audio & Video": "applications-multimedia",
-	"Development":   "applications-development",
-	"Education":     "applications-education",
-	"Games":         "applications-games",
-	"Graphics":      "applications-graphics",
-	"Network":       "applications-internet",
-	"Office":        "applications-office",
-	"Science":       "applications-science",
-	"Settings":      "preferences-desktop",
-	"System":        "applications-system",
-	"Utility":       "applications-utilities",
-	otherCategory:   "applications-other",
-}
+// otherCategory collects apps with no main category; it is listed last.
+var otherCategory = category{"", "Other", "applications-other"}
 
 // categorizeApps groups apps (assumed name-sorted) into one submenu per
 // non-empty main category, sorted by label with "Other" last. mode "first"
@@ -48,14 +36,16 @@ func categorizeApps(apps []MenuItem, mode string) []MenuItem {
 	buckets := map[string][]MenuItem{}
 	for _, app := range apps {
 		var labels []string
-		for _, c := range app.Categories {
-			if label, ok := mainCategories[c]; ok {
-				labels = append(labels, label)
+		for _, key := range app.Categories {
+			for _, c := range mainCategories {
+				if c.key == key {
+					labels = append(labels, c.label)
+				}
 			}
 		}
 		switch {
 		case len(labels) == 0:
-			labels = []string{otherCategory}
+			labels = []string{otherCategory.label}
 		case mode == "first":
 			labels = labels[:1]
 		}
@@ -67,14 +57,10 @@ func categorizeApps(apps []MenuItem, mode string) []MenuItem {
 	}
 
 	var menus []MenuItem
-	for label, children := range buckets {
-		menus = append(menus, MenuItem{Name: label, Icon: categoryIcons[label], Children: children})
-	}
-	sort.Slice(menus, func(i, j int) bool {
-		if (menus[i].Name == otherCategory) != (menus[j].Name == otherCategory) {
-			return menus[j].Name == otherCategory
+	for _, c := range append(slices.Clone(mainCategories), otherCategory) {
+		if children := buckets[c.label]; len(children) > 0 {
+			menus = append(menus, MenuItem{Name: c.label, Icon: c.icon, Children: children})
 		}
-		return menus[i].Name < menus[j].Name
-	})
+	}
 	return menus
 }

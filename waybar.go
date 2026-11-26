@@ -177,6 +177,10 @@ func (p *waybarProc) scheduleAutoRestart() {
 	logger.Warn("waybar exited unexpectedly, restarting")
 	reloadMu.Lock()
 	defer reloadMu.Unlock()
+	if p.alive() {
+		logger.Debug("waybar already running, skipping auto-restart")
+		return
+	}
 	if err := p.start(); err != nil {
 		logger.Error("failed to restart waybar after crash", "err", err)
 	}
@@ -193,7 +197,7 @@ func reloadWaybar() {
 
 	if !waybar.alive() {
 		logger.Info("waybar not running, performing cold start")
-	} else if err := syscall.Kill(waybar.pid(), syscall.SIGUSR2); err != nil {
+	} else if err := killFn(waybar.pid(), syscall.SIGUSR2); err != nil {
 		logger.Warn("USR2 failed, falling back to cold start", "err", err)
 	} else {
 		logger.Info("waybar reloaded via USR2", "pid", waybar.pid())

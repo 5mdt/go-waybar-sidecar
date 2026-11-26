@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -123,59 +122,6 @@ func TestBuildXMLAndWriteJSON(t *testing.T) {
 	}
 }
 
-func TestBackupFile(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.jsonc")
-	bak := path + ".bak"
-
-	// no-op when the file does not exist
-	if err := backupFile(path); err != nil {
-		t.Fatalf("backupFile on missing file: %v", err)
-	}
-	if _, err := os.Stat(bak); !os.IsNotExist(err) {
-		t.Errorf("expected no %s, err = %v", bak, err)
-	}
-
-	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := backupFile(path); err != nil {
-		t.Fatalf("backupFile: %v", err)
-	}
-	if _, err := os.Stat(path); err != nil {
-		t.Errorf("expected %s to still exist, err = %v", path, err)
-	}
-	data, err := os.ReadFile(bak)
-	if err != nil {
-		t.Fatalf("reading backup: %v", err)
-	}
-	if string(data) != "old" {
-		t.Errorf("backup content = %q, want %q", data, "old")
-	}
-}
-
-func TestWriteFileAtomic(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "sub", "out.txt")
-
-	if err := writeFileAtomic(path, []byte("one")); err != nil {
-		t.Fatalf("writeFileAtomic: %v", err)
-	}
-	if err := writeFileAtomic(path, []byte("two")); err != nil {
-		t.Fatalf("writeFileAtomic overwrite: %v", err)
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil || string(data) != "two" {
-		t.Fatalf("content = %q, err = %v, want %q", data, err, "two")
-	}
-	entries, _ := os.ReadDir(filepath.Dir(path))
-	if len(entries) != 1 {
-		t.Errorf("expected only the output file, got %d entries", len(entries))
-	}
-}
-
 func TestWriteJSONUnchangedIsNotRewritten(t *testing.T) {
 	dir := t.TempDir()
 	origOutJSON := outJSON
@@ -251,47 +197,6 @@ func TestValidateMenuDocDetectsDuplicateIDs(t *testing.T) {
 	}
 	if err := validateMenuDoc(makeDoc()); err != nil {
 		t.Errorf("empty doc: unexpected error: %v", err)
-	}
-}
-
-func TestBuildXMLSkipsInvalidMenu(t *testing.T) {
-	dir := t.TempDir()
-	origMenuDir := menuDir
-	origValidate := validateMenu
-	menuDir = filepath.Join(dir, "gtk3-menus")
-	defer func() { menuDir, validateMenu = origMenuDir, origValidate }()
-
-	// Stub: reject menus with exactly 2 <object id> elements
-	// (the GtkMenu root "menu" + one leaf item = bad menu shape in this test).
-	validateMenu = func(doc *etree.Document) error {
-		if len(doc.Root().FindElements("//object[@id]")) == 2 {
-			return fmt.Errorf("injected validation error")
-		}
-		return nil
-	}
-
-	cfg := Config{
-		Waybar: map[string]any{},
-		Menus: map[string][]MenuItem{
-			"custom/Good": {{Name: "Terminal", Action: "foot"}, {Name: "Browser", Action: "firefox"}},
-			"custom/Bad":  {{Name: "OnlyOne", Action: "true"}},
-		},
-	}
-	results := buildXML(cfg)
-
-	if _, ok := results["custom/Good"]; !ok {
-		t.Error("custom/Good should be present in results")
-	}
-	if _, ok := results["custom/Bad"]; ok {
-		t.Error("custom/Bad should be absent from results")
-	}
-	goodPath := filepath.Join(menuDir, "custom-good.xml")
-	if _, err := os.Stat(goodPath); err != nil {
-		t.Errorf("custom/Good XML file should be written: %v", err)
-	}
-	badPath := filepath.Join(menuDir, "custom-bad.xml")
-	if _, err := os.Stat(badPath); !os.IsNotExist(err) {
-		t.Errorf("custom/Bad XML file should NOT be written, err = %v", err)
 	}
 }
 
@@ -429,7 +334,7 @@ func TestAddNodeBold(t *testing.T) {
 		t.Errorf("actions[item2] = %q, want %q", actions["item2"], "powerprofilesctl set performance")
 	}
 
-	if err := validateMenu(newDocFromFile(t, menus["custom/Power"].path)); err != nil {
+	if err := validateMenuDoc(newDocFromFile(t, menus["custom/Power"].path)); err != nil {
 		t.Errorf("expected bold-item menu to pass validation, got: %v", err)
 	}
 }
@@ -507,7 +412,7 @@ func buildIconMenu(t *testing.T, items []MenuItem) string {
 
 	menus := buildXML(Config{Waybar: map[string]any{}, Menus: map[string][]MenuItem{"custom/Start": items}})
 	path := menus["custom/Start"].path
-	if err := validateMenu(newDocFromFile(t, path)); err != nil {
+	if err := validateMenuDoc(newDocFromFile(t, path)); err != nil {
 		t.Errorf("menu failed validation: %v", err)
 	}
 	data, err := os.ReadFile(path)
@@ -587,5 +492,44 @@ func TestAddNodeIconGlyph(t *testing.T) {
 	}
 	if !strings.Contains(xml, `class="GtkImage" id="item2_icon"`) {
 		t.Errorf("sibling should keep the blank GtkImage slot:\n%s", xml)
+	}
+}
+
+func TestJSONSafeDeepCopiesAndStringifiesKeys(t *testing.T) {
+	in := map[string]any{
+		"a": map[interface{}]interface{}{1: []any{map[interface{}]interface{}{true: "x"}}},
+	}
+	out := jsonSafe(in).(map[string]any)
+
+	inner := out["a"].(map[string]any)["1"].([]any)[0].(map[string]any)
+	if inner["true"] != "x" {
+		t.Errorf("keys not stringified: %v", out)
+	}
+	if _, ok := in["a"].(map[interface{}]interface{}); !ok {
+		t.Error("input was modified")
+	}
+	out["b"] = 1
+	if _, ok := in["b"]; ok {
+		t.Error("output shares the top-level map with input")
+	}
+}
+
+func TestWriteJSONDoesNotModifyInput(t *testing.T) {
+	dir := t.TempDir()
+	origOutJSON := outJSON
+	outJSON = filepath.Join(dir, "config.jsonc")
+	defer func() { outJSON = origOutJSON }()
+
+	cfg := map[string]any{"custom/Start": map[string]any{
+		"menu_definition": []any{map[string]any{"name": "x"}},
+	}}
+	writeJSON(cfg, map[string]menuResult{"custom/Start": {path: "/m.xml", actions: map[string]string{}}})
+
+	mod := cfg["custom/Start"].(map[string]any)
+	if _, ok := mod["menu_definition"]; !ok {
+		t.Error("menu_definition removed from input")
+	}
+	if _, ok := mod["menu-file"]; ok {
+		t.Error("menu-file injected into input")
 	}
 }

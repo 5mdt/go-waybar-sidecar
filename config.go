@@ -282,16 +282,6 @@ var (
 	outJSON = filepath.Join(waybarDir, "config.jsonc")
 )
 
-func resolvedPath(p string) string {
-	if r, err := filepath.EvalSymlinks(p); err == nil {
-		return r
-	}
-	if r, err := filepath.EvalSymlinks(filepath.Dir(p)); err == nil {
-		return filepath.Join(r, filepath.Base(p))
-	}
-	return p
-}
-
 func ensureConfig() error {
 	if err := os.MkdirAll(waybarDir, 0o755); err != nil {
 		return fmt.Errorf("create waybar dir %s: %w", waybarDir, err)
@@ -416,15 +406,4 @@ func resolveInclude(item MenuItem) ([]MenuItem, bool) {
 	default:
 		return nil, false
 	}
-}
-
-// expandHome replaces a leading ~ with the value of $HOME.
-func expandHome(path string) string {
-	if path == "~" {
-		return os.Getenv("HOME")
-	}
-	if strings.HasPrefix(path, "~/") {
-		return os.Getenv("HOME") + path[1:]
-	}
-	return path
 }

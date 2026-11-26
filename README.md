@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/img/logo/logo.svg" alt="Go, Waybar Sidecar logo" width="160">
+</p>
+
 # Go, Waybar Sidecar!
 
 Generate configs for Waybar with menus, monitors waybar state. Suspiciously, code has an LLM aftertaste.

@@ -32,10 +32,13 @@ func newFlagSet() *flag.FlagSet {
 			fs.String(s.key, s.def, s.usage)
 		}
 	}
+	fs.Bool("version", false, "print version and exit")
 	fs.String("config", "", "path to config.yaml (default: "+configPath+")")
 	fs.Usage = func() { printUsage(fs) }
 	return fs
 }
+
+func versionString() string { return appName + " " + version }
 
 func printUsage(fs *flag.FlagSet) {
 	out := os.Stdout
@@ -74,6 +77,11 @@ Config:
 func main() {
 	fs := newFlagSet()
 	_ = fs.Parse(os.Args[1:]) // ExitOnError
+
+	if fs.Lookup("version").Value.String() == "true" {
+		fmt.Println(versionString())
+		return
+	}
 
 	configPath = resolveConfigPath(fs)
 

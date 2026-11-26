@@ -1,5 +1,10 @@
 # Changelog
 
+# v1.1.1
+## Added
+
+- version flag
+
 # v1.1.0
 
 ## Added
@@ -18,6 +23,7 @@
 - Session actions menu (GWS-0030).
 - GitHub Actions publishes Linux amd64/arm64 binaries: rolling `latest` from `main`, versioned releases from `v*` tags.
 - Generated `config.jsonc` starts with `//` header: generation date, app name, version and source (GWS-0001). Version is set via `-ldflags -X main.version` (`make build`).
+- `--version` flag (GWS-0033).
 
 ## Changed
 

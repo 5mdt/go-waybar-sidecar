@@ -46,6 +46,12 @@ From source (requires Go), installs to `~/.local/bin`:
 make install
 ```
 
+## First run
+
+On first start the sidecar writes a sample `~/.config/go-waybar-sidecar/config.yaml` and generates `~/.config/waybar/config.jsonc` from it. Your existing `config.jsonc` is saved as `config.jsonc.bak`.
+
+To reuse your own Waybar config, convert it to YAML (e.g. `yq -P config.jsonc`) and put it under the `waybar:` key in that file.
+
 ## Usage
 
 ```sh

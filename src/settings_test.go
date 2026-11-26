@@ -386,3 +386,23 @@ func TestEnsureSettings_AllTableKeys(t *testing.T) {
 		}
 	}
 }
+
+// version flag tests
+
+func TestVersionFlag(t *testing.T) {
+	if got := parseTestFlags(t).Lookup("version").Value.String(); got != "false" {
+		t.Errorf("default version flag = %s, want false", got)
+	}
+	if got := parseTestFlags(t, "--version").Lookup("version").Value.String(); got != "true" {
+		t.Errorf("--version flag = %s, want true", got)
+	}
+}
+
+func TestVersionString(t *testing.T) {
+	old := version
+	t.Cleanup(func() { version = old })
+	version = "v1.2.3"
+	if got, want := versionString(), "go-waybar-sidecar v1.2.3"; got != want {
+		t.Errorf("versionString() = %q, want %q", got, want)
+	}
+}

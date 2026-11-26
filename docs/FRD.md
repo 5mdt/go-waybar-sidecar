@@ -33,6 +33,7 @@
 - [GWS-0030. Session actions menu](features/GWS-0030-session-actions-menu.md) - `#menu` `#config-generation` `#power`
 - [GWS-0031. Categorized application list](features/GWS-0031-categorized-application-list.md) - `#menu` `#config-generation` `#filesystem`
 - [GWS-0032. Menu item icons](features/GWS-0032-menu-item-icons.md) - `#menu` `#config-generation`
+- [GWS-0033. Version flag](features/GWS-0033-version-flag.md) - `#cli`
 
 ## Tags
 
@@ -42,7 +43,7 @@
 - `#reload`: GWS-0005, GWS-0006, GWS-0007, GWS-0016, GWS-0017, GWS-0022, GWS-0027
 - `#process-lifecycle`: GWS-0006, GWS-0007, GWS-0008, GWS-0010, GWS-0012, GWS-0017, GWS-0022, GWS-0027
 - `#logging`: GWS-0011, GWS-0013, GWS-0026
-- `#cli`: GWS-0010, GWS-0011, GWS-0014, GWS-0016, GWS-0019
+- `#cli`: GWS-0010, GWS-0011, GWS-0014, GWS-0016, GWS-0019, GWS-0033
 - `#filesystem`: GWS-0008, GWS-0021, GWS-0028, GWS-0031
 - `#jobs`: GWS-0025
 - `#power`: GWS-0029, GWS-0030

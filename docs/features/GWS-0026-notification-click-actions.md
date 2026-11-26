@@ -8,15 +8,15 @@ Desktop notifications (GWS-0013) are clickable: every notification carries a sin
 
 ## Implementation
 
-`notify.go`:
+`src/notify.go`:
 - `notifyOpen(label, path string) slog.Attr` returns a `slog.Attr` keyed `notify_open` wrapping an `openAction{label, path}`. Call sites pass it like any other log attribute, e.g. `logger.Warn("job failed", "name", j.Name, "err", err, notifyOpen("Show output", outPath))`.
 - `openAction` implements `slog.LogValuer`, rendering as just its `path` in the text log - the label is notification-only, so text logs stay unaffected by this feature.
 - `notifyHandler.Handle` scans the merged attrs (`h.attrs` + the record's own) for `notify_open`. If found, its label/path drive the notification's action and the attribute is excluded from the notification body (it already appears in the text log via `LogValue`). If absent, the default action is `notifyOpen("Open config", configPath)`.
 - The resolved label/path are queued with the notification and threaded by `notifier.send` (GWS-0013) into the `Notify` action.
 
 Call sites that override the default:
-- `cron.go`, job failure: `notifyOpen("Show output", expandHome(j.Output))` when the job has an `output:` path.
-- `generator.go`, invalid menu XML: `notifyOpen("Open menu", path)` for the offending menu file.
+- `src/cron.go`, job failure: `notifyOpen("Show output", expandHome(j.Output))` when the job has an `output:` path.
+- `src/generator.go`, invalid menu XML: `notifyOpen("Open menu", path)` for the offending menu file.
 
 Every other notification (e.g. reload failures, waybar start failures) uses the default "Open config" action, since `config.yaml` is the first place to look.
 

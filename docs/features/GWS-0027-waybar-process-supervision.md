@@ -10,8 +10,8 @@ Why: process-table lookups (`pgrep`) misreported liveness when zombies existed.
 
 ## Implementation
 
-`waybar.go`:
-- `waybarProc` holds the current `*exec.Cmd`, a `done` channel closed when `Wait()` returns, a `generation` counter, and an `expectExit` flag - all guarded by a mutex. Package-level `var waybar waybarProc` (mirrors `var jobs jobRunner` in `cron.go`).
+`src/waybar.go`:
+- `waybarProc` holds the current `*exec.Cmd`, a `done` channel closed when `Wait()` returns, a `generation` counter, and an `expectExit` flag - all guarded by a mutex. Package-level `var waybar waybarProc` (mirrors `var jobs jobRunner` in `src/cron.go`).
 - `start() error`: `exec.Command("waybar")` with `SysProcAttr{Setsid: true}` (own session, shielded from terminal signals). A goroutine calls `cmd.Wait()`, then closes `done` and calls `onExit`.
 - `alive() bool`: `true` iff a process was started and its `done` channel is not yet closed. No `pgrep`, no `/proc`, no race window.
 - `pid() int`: the current child's PID, or `0`.

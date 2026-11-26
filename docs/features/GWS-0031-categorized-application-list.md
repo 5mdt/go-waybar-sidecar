@@ -8,10 +8,10 @@
 
 ## Implementation
 
-`desktop.go`:
+`src/desktop.go`:
 - `desktopEntry.categories []string`: `Categories=` split on `;`, trimmed, empty parts dropped. `scanApplications()` copies it to `MenuItem.Categories`.
 
-`categories.go`:
+`src/categories.go`:
 - `mainCategories`: label-sorted slice of `{key, label, icon}` - AudioVideo ("Audio & Video"), Development, Education, Game ("Games"), Graphics, Network, Office, Science, Settings, System, Utility. Other values (`GTK`, `WebBrowser`, ...) are ignored. `otherCategory` is the same shape.
 - `categorizeApps(apps []MenuItem, mode string) []MenuItem`: buckets apps by label and returns `MenuItem{Name: label, Children: apps}` per non-empty bucket, in `mainCategories` order with "Other" last; apps keep name order.
   - `all` (default): app goes to every main category it lists.
@@ -20,7 +20,7 @@
   - Unknown `mode`: warning, treated as `all`.
   - Each submenu gets the category's `icon` (fixed freedesktop names, e.g. Development -> `applications-development`), rendered per GWS-0032.
 
-`config.go`:
+`src/config.go`:
 - `MenuItem.Mode` (`yaml:"mode"`), `MenuItem.Categories` (`yaml:"-"`, set only by `scanApplications`).
 - `resolveInclude(item MenuItem)` gains the `applications:categories` alias; `mode` is ignored on other aliases.
 

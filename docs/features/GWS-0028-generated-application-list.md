@@ -8,19 +8,19 @@ A menu item can pull in a flat, alphabetical list of installed applications, gen
 
 ## Implementation
 
-`desktop.go` - scanning and parsing:
+`src/desktop.go` - scanning and parsing:
 - `appDirs() []string`: XDG application directories in precedence order - `$XDG_DATA_HOME/applications` (default `~/.local/share/applications`), then `<dir>/applications` for each entry of `$XDG_DATA_DIRS` (default `/usr/local/share:/usr/share`).
 - `desktopEntry struct{ name, exec string }` and `parseDesktopEntry(b []byte) (desktopEntry, bool)`: hand-rolled line scanner over the `[Desktop Entry]` group only (other groups, e.g. `[Desktop Action ...]`, and localized keys like `Name[de]` are ignored). Returns `ok=false` when `NoDisplay=true`, `Hidden=true`, `Type` is not `Application`, or `Name`/`Exec` is missing. Also records `Terminal`, `OnlyShowIn`, `NotShowIn` and `TryExec`.
 - `entryVisible(e desktopEntry, desktops []string) bool`: false when `OnlyShowIn` is set and shares no value with `desktops` (the `:`-separated `$XDG_CURRENT_DESKTOP`), when `NotShowIn` shares a value, or when `TryExec` is set and `exec.LookPath` fails.
 - `stripFieldCodes(exec string) string`: removes Exec field codes (`%f %u %F %U %i %c %k %d %D %n %N %v %m`) and unescapes `%%` to `%` (a `%%` is never read as the start of a field code, so `%%f` yields `%f`).
 - `scanApplications() []MenuItem` (package-level `var`, indirection for tests): walks `appDirs()` recursively for `*.desktop` files, parses each, dedupes by desktop file id (path relative to its app dir with `/` replaced by `-`) keeping the first directory in precedence order, skips entries failing `entryVisible`, and returns `MenuItem{Name: ..., Action: ...}` sorted alphabetically by name, case-insensitively. `Terminal=true` entries get the action `xdg-terminal-exec <cmd>`.
 
-`config.go` - wiring into menus:
+`src/config.go` - wiring into menus:
 - `MenuItem.Include string` (`yaml:"include"`): when set, the item is replaced in place by the resolved alias's items instead of being rendered itself.
 - `expandIncludes(items []MenuItem) []MenuItem`: recurses through `menu_definition` (including into `Children`), splicing in resolved items for any `Include` and dropping items whose alias is unknown (logged as a warning). The only alias currently registered is `applications:plain`, resolved via `scanApplications()`.
 - Called from `loadConfig()` for every menu after `parseConfig` builds `cfg.Menus`.
 
-`watcher.go`:
+`src/watcher.go`:
 - `watch()` adds each of `appDirs()` to the fsnotify watch set (already tolerant of missing directories via `addWatch`).
 - `isWatchedFile()` accepts `.desktop` files under any `appDirs()` path.
 

@@ -8,13 +8,13 @@ The sidecar renders one GTK `GtkMenu` XML document per menu-bearing module (see 
 
 ## Implementation
 
-`generator.go`:
+`src/generator.go`:
 - `buildXML(cfg)`, for each entry in `cfg.Menus`:
   - Creates an `etree` document with an `<interface>` root containing a `GtkMenu` object with `id="menu"`.
   - For each top-level entry in the menu's items, calls `addNode()` to append a `GtkMenuItem` child.
   - Indents the document (2 spaces) and writes it to `gtk3-menus/<menuFileName(module)>.xml`.
   - Returns a `menuResult{path, actions}` per module, where `actions` is the `menuActions` map built by `addNode()` (item name → action), consumed by `writeJSON()` (GWS-0001) for the `menu-actions` field.
-- `cfg.Menus` is parsed in `config.go` `parseConfig()` from each module's `menu_definition` into `[]MenuItem{Name, Action, Children}` (GWS-0015).
+- `cfg.Menus` is parsed in `src/config.go` `parseConfig()` from each module's `menu_definition` into `[]MenuItem{Name, Action, Children}` (GWS-0015).
 
 ## Configuration
 

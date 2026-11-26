@@ -8,7 +8,7 @@ If Waybar is not running, or it dies after a `SIGUSR2` reload (GWS-0006), the si
 
 ## Implementation
 
-`waybar.go` `reloadWaybar()`, fallback path after the SIGUSR2 reload attempt fails or finds no running instance:
+`src/waybar.go` `reloadWaybar()`, fallback path after the SIGUSR2 reload attempt fails or finds no running instance:
 - Holds a package-level mutex (`reloadMu`) for its entire body, so only one reload (SIGUSR2 + cold start) runs at a time. Concurrent callers block and then observe the already-restarted waybar instead of racing their own cold start. Why: concurrent cold starts would `stop`/`start` each other's freshly-spawned process and produce a spurious failure log.
 - Logs "waybar not running, performing cold start" at info, only when no tracked waybar is alive. A failed or fatal `SIGUSR2` logs its own warning (GWS-0006) instead.
 - Calls `waybar.stop()` then `waybar.start()` (GWS-0027), which runs `waybar` in its own session (`Setsid`).

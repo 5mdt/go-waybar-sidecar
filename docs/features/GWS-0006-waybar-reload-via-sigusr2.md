@@ -8,7 +8,7 @@ After regenerating `config.jsonc` and the per-menu XML files (GWS-0015), the sid
 
 ## Implementation
 
-`waybar.go` `reloadWaybar()`, called at the end of `generate()`:
+`src/waybar.go` `reloadWaybar()`, called at the end of `generate()`:
 - `waybar.alive()` reports whether the sidecar's supervised child (GWS-0027) is currently running - an in-memory channel check, not a process lookup.
 - If alive, sends `SIGUSR2` to `waybar.pid()`. On success:
   - Logs "waybar reloaded via USR2".

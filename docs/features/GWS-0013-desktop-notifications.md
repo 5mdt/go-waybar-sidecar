@@ -8,7 +8,7 @@ The sidecar can mirror its log output to desktop notifications, so problems are 
 
 ## Implementation
 
-`notify.go`:
+`src/notify.go`:
 - `urgencyHint(level slog.Level) byte` maps `slog.LevelError` → `2` (critical), `slog.LevelWarn` → `1` (normal), and `info`/`debug` → `0` (low) - the `urgency` hint values used by `org.freedesktop.Notifications.Notify`.
 - `parseNotifyLevel(s string) (level slog.Level, enabled bool, err error)` parses `--notify-level`. `"off"` (case-insensitive) returns `enabled=false`; any other valid level (`debug`, `info`, `warn`, `error`) delegates to `slog.Level.UnmarshalText` and returns `enabled=true`. An unrecognized value returns an error.
 - `notifier` owns a `github.com/godbus/dbus/v5` session-bus connection and the set of notification IDs currently awaiting a click:
@@ -19,7 +19,7 @@ The sidecar can mirror its log output to desktop notifications, so problems are 
 - `openTarget` (var, stubbable) runs `xdg-open <path>` to fulfil a clicked action.
 - `notifyHandler` is a `slog.Handler` that, for records at or above its threshold, does a non-blocking send of a `notification` (record message as summary, formatted attributes as body) to its queue. When the queue is full the record is dropped, and `Handle` always returns `nil`, so a hung or absent notification daemon never blocks or breaks logging.
 
-`main.go`:
+`src/main.go`:
 - Flag `--notify-level <level>` (default `"error"`).
 - `buildLogger()` always builds the `TextHandler`. If notifications are enabled and `newNotifier` succeeds, it also builds a `notifyHandler` and combines both via `slog.NewMultiHandler`. The queue is a `chan notification` drained by one goroutine calling `notifier.send`; send errors are ignored.
 - If `newNotifier` fails, an info line ("desktop notifications inactive") is logged once and text logging continues.

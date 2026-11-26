@@ -8,7 +8,7 @@ Menu items get unique GtkBuilder ids whatever their names are, and an item named
 
 ## Implementation
 
-`generator.go` `addNode`:
+`src/generator.go` `addNode`:
 - Takes a per-menu counter `n *int`, shared across the whole document (submenus included) and incremented once per item or separator.
 - For `item.Name == "---"`: emits `<object class="GtkSeparatorMenuItem" id="sepN"/>`; no entry is added to `actions`.
 - For all other items: the element ID is `itemN`, never derived from the name, so ids cannot collide whatever the names are. The actions map key is the same ID. Sub-objects use `<id>_box`, `<id>_icon`, `<id>_label`.

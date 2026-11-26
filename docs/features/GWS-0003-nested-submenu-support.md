@@ -8,7 +8,7 @@ Items in `menu_definition` may contain `children`, which are rendered as a neste
 
 ## Implementation
 
-`generator.go` `addNode(parent, item, actions, n, withIcon)`:
+`src/generator.go` `addNode(parent, item, actions, n, withIcon)`:
 - Always creates a `GtkMenuItem` with a unique `id` (`item<N>`, see GWS-0023).
 - If `item.Children` is empty, the item is a leaf: its label is `item.Name` and `actions[id] = item.Action` is recorded for `menu-actions` (GWS-0001).
 - If `item.Children` is non-empty, the item is a submenu:

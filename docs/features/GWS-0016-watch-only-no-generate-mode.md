@@ -8,20 +8,20 @@ Some users hand-maintain their own `~/.config/waybar/config.jsonc` (and any GTK 
 
 ## Implementation
 
-`generator.go`:
+`src/generator.go`:
 - Package var `noGenerate bool` (default `false`).
 - Package var `doReload = reloadWaybar`, an indirection so tests can stub reload behavior.
 - `generate(cfg Config)`:
   - When `noGenerate` is `true`, it logs that generation was skipped and calls `doReload()` directly - no XML/JSON is written.
   - Otherwise it calls `writeOutputs(cfg)` (`buildXML`/`writeJSON`) and then `doReload()`.
 
-`main.go`:
+`src/main.go`:
 - Flag `--no-generate` (bool, default `false`).
 - After `flag.Parse()`, `noGenerate = *noGenerateFlag`.
 - `flag.Usage` documents the flag.
 - `run()`: when `noGenerate` is set, skips `ensureConfig()` and `loadConfig()` entirely (an empty `Config{}` is passed to `generate` instead) - a missing or invalid `config.yaml` is irrelevant in this mode.
 
-`watcher.go`:
+`src/watcher.go`:
 - `reload()` only calls `loadConfig()` when `!noGenerate`; it always calls `generate(cfg)`, which writes outputs only when `!noGenerate` and always reloads waybar once.
 
 ## Configuration

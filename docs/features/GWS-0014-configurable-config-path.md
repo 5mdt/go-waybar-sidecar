@@ -8,12 +8,12 @@ The sidecar's source `config.yaml` lives in its own directory, `~/.config/go-way
 
 ## Implementation
 
-`config.go`:
+`src/config.go`:
 - `configPath` defaults to `filepath.Join(gwsDir, "config.yaml")`, i.e. `~/.config/go-waybar-sidecar/config.yaml`.
 - `waybarDir` and `outJSON` (`config.jsonc`) are unchanged - they remain directly under `~/.config/waybar`, where waybar itself expects `config.jsonc`. `menuDir` (`~/.config/waybar/gtk3-menus`) holds one XML file per menu-bearing module (GWS-0015).
 - `ensureConfig()` creates `waybarDir`, `menuDir`, and `filepath.Dir(configPath)` (`0o755` each) before writing the default config, so all required directories - including any custom `--config` directory - are created automatically on first run.
 
-`main.go`:
+`src/main.go`:
 - Flag `--config <path>` (default: empty). After `flag.Parse()`, if set, `configPath = resolvedPath(*configFlag)`, overriding the default before `run()` and `flag.Usage` reference it.
 - `flag.Usage` shows the active default path.
 

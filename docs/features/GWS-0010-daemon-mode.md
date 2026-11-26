@@ -8,7 +8,7 @@ The `--daemon` flag re-launches the sidecar in the background, detached from the
 
 ## Implementation
 
-`main.go`:
+`src/main.go`:
 - `main()` parses `--daemon`. If set, calls `forkDetach()` and returns immediately (does not call `run()`); on a returned error it logs it and exits 1.
 - `forkDetach()`:
   - Runs `os.Args[0]` (the same binary) with `os.Args[1:]` via `exec.Command`; the child doesn't re-fork because `GO_WAYBAR_SIDECAR_FORKED=1` is set (GWS-0019).

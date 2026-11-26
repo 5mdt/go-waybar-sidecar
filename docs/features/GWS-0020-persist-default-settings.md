@@ -14,14 +14,14 @@ Rules:
 
 ## Implementation
 
-`config.go`:
+`src/config.go`:
 - The `settings` table (GWS-0019) supplies each key, its built-in default, and its YAML tag (`!!bool` when `isBool`, else `!!str`).
 - `ensureSettings(path string) error` - called once at startup after `ensureConfig()`:
   - Parses the file into a `yaml.Node`; a missing, unparseable or malformed file is a no-op.
   - Appends every table row missing from the `sidecar` mapping (created if absent).
   - Only if something was added: `backupFile(path)` (GWS-0018), then `writeFileAtomic` of the re-encoded YAML (indent 2).
 
-`main.go` (`run()`):
+`src/main.go` (`run()`):
 - Calls `ensureSettings(configPath)` right after `ensureConfig()` (inside the `if !noGenerate` block). Errors are logged as warnings. It runs before the watcher starts, so the write cannot self-trigger.
 
 ## Configuration

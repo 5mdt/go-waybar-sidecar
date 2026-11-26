@@ -8,11 +8,11 @@ Any module under `waybar:` in `config.yaml` that has a `menu_definition` field g
 
 ## Implementation
 
-`config.go` `loadConfig()`:
+`src/config.go` `loadConfig()`:
 - After the first unmarshal pass into `raw.Waybar` (`map[string]any`), iterates every top-level key in `raw.Waybar`. For each value that is a `map[string]any` and contains a `menu_definition` key, the value is re-marshaled to YAML and unmarshaled into `[]MenuItem` (round-trip via `yaml.Marshal`/`yaml.Unmarshal`, reusing the existing tagged struct - no second typed pass needed).
 - Result is `Config.Menus map[string][]MenuItem`, keyed by module name (e.g. `"custom/Start"`, `"custom/Power"`). Modules without `menu_definition` (e.g. `clock`, `layer`, `modules-left`) are skipped.
 
-`generator.go`:
+`src/generator.go`:
 - `buildXML(cfg)` iterates `cfg.Menus` (sorted by module name for deterministic output), building one `GtkMenu` document per menu via the `addNode()` (nested submenus per GWS-0003). Each document is written to `gtk3-menus/<menuFileName(module)>.xml`.
 - `menuFileName(module)` derives the filename: lowercase the module name and replace `/` with `-`, e.g. `custom/Start` → `custom-start.xml`, `custom/Power` → `custom-power.xml`.
 - `writeJSON(waybar, menus)` iterates the same `menus` map: for each module name present in `waybar`, removes `menu_definition` and sets `menu: "on-click"`, `menu-file: <path>`, `menu-actions: <map>`. Modules without an entry in `menus` (no `menu_definition`) are left untouched.

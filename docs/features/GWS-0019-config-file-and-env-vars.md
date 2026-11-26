@@ -14,14 +14,14 @@ defaults  <  config file (sidecar:)  <  environment variables  <  CLI flags
 
 ## Implementation
 
-`config.go`:
+`src/config.go`:
 - `settings` - one table row per setting: key, env var, default (string), flag usage, `isBool`. Flags, env lookup, file lookup, `--help` text, and the GWS-0020 defaults are all driven by it, so adding a setting is one row.
 - `rawConfig.Sidecar map[string]string` - the `sidecar:` top-level key next to `waybar:`; scalars (including YAML `true`) decode to their text.
 - `loadSettings(path string) (map[string]string, error)` - reads the `sidecar:` section. A missing file (first run) or absent key gives `nil, nil`; unreadable or malformed YAML returns the error.
 - `resolveConfigPath(fs *flag.FlagSet) string` - default → env (`GO_WAYBAR_SIDECAR_CONFIG`) → `--config` if passed.
 - `resolveSettings()` - for each table row takes the last of default, file, env, flag (flag only if passed). Booleans accept `true/false/yes/no/1/0` (case-insensitive; `yes`/`no` extend `strconv.ParseBool`); an invalid boolean from any source is an error.
 
-`main.go`:
+`src/main.go`:
 - `newFlagSet()` registers one flag per table row plus `--config`. `--help` prints the flag defaults from the flag set, then env vars and the `sidecar:` block generated from the table.
 - `main()` applies the resolution order:
   1. `resolveConfigPath` to set `configPath`.

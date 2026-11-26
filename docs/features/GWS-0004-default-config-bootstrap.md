@@ -8,8 +8,8 @@ On startup, if `configPath` (default `~/.config/go-waybar-sidecar/config.yaml`, 
 
 ## Implementation
 
-`config.go`:
-- `defaultConfig` is the contents of `config.yaml` (in the repo root), embedded into the binary at build time via `//go:embed config.yaml`.
+`src/config.go`:
+- `defaultConfig` is the contents of `src/config.yaml`, embedded into the binary at build time via `//go:embed config.yaml`.
 - `ensureConfig()`, called from `run()` before `loadConfig()`:
   - If `configPath` exists, logs at debug and returns.
   - Otherwise logs at info, creates `filepath.Dir(configPath)` (`0o755`), and writes `defaultConfig` to `configPath` (`0o644`).
@@ -29,7 +29,7 @@ On startup, if `configPath` (default `~/.config/go-waybar-sidecar/config.yaml`, 
 
 ### Unit Testing
 
-- `ensureConfig()` with `configPath` pointing at a non-existent file in a temp dir: assert the file is created and its contents equal `config.yaml`'s embedded bytes.
+- `ensureConfig()` with `configPath` pointing at a non-existent file in a temp dir: assert the file is created and its contents equal the embedded bytes.
 - `ensureConfig()` with `configPath` pointing at an existing file: assert the file's contents are unchanged after the call.
 - `ensureConfig()` with a `configPath` that cannot be created (parent is a regular file): returns an error.
 

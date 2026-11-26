@@ -10,7 +10,7 @@ Why: an exclusive lock cannot be raced, and the PID in it removes the need to sc
 
 ## Implementation
 
-`pid.go`:
+`src/pid.go`:
 - `acquireInstanceLock() (f *os.File, holder int, err error)`: opens `<pidDir>/waybar-sidecar.lock` and takes a non-blocking exclusive `flock`.
   - Acquired: truncates the file and writes `os.Getpid()`; returns `f`.
   - `EWOULDBLOCK`: reads the PID in the file and returns `f=nil` and `holder` (0 if empty or unparsable). Not an error.
@@ -24,7 +24,7 @@ Why: an exclusive lock cannot be raced, and the PID in it removes the need to sc
 ## Configuration
 
 - `pidDir` = `~/.local/state/waybar`.
-- `sidecarStopGrace` (5s) / `sidecarStopPoll` (100ms): internal timing vars, not user-configurable (mirrors `usr2SettleDelay` etc. in `waybar.go`).
+- `sidecarStopGrace` (5s) / `sidecarStopPoll` (100ms): internal timing vars, not user-configurable (mirrors `usr2SettleDelay` etc. in `src/waybar.go`).
 
 ## Testing
 

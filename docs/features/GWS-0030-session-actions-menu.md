@@ -8,7 +8,7 @@ A menu item can pull in a list of session/power actions (lock, log out, suspend,
 
 ## Implementation
 
-`sessionactions.go`:
+`src/sessionactions.go`:
 - `sessionActions` table, in menu order: `{name, action, method}`. `method` is the `org.freedesktop.login1.Manager` availability call; empty means always shown.
 
   | Name                   | Action                                         | Method                     |
@@ -26,7 +26,7 @@ A menu item can pull in a list of session/power actions (lock, log out, suspend,
 - `scanSessionActions() []MenuItem` (package-level `var`, indirection for tests): calls `buildSessionActionItems` with a `can` func querying `org.freedesktop.login1` (`/org/freedesktop/login1`) on the system bus. Returns `nil` (item dropped, see `resolveInclude`) if the bus is unavailable.
 - `buildSessionActionItems(can func(method string) string) []MenuItem`: pure; keeps entries with empty `method` or `can(method)` of `yes`/`challenge`.
 
-`config.go`:
+`src/config.go`:
 - `resolveInclude` gains a `"session-actions:plain"` case.
 
 ## Configuration

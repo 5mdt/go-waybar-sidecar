@@ -8,7 +8,7 @@ The sidecar renders `~/.config/waybar/config.jsonc` from the `waybar` section of
 
 ## Implementation
 
-`generator.go`:
+`src/generator.go`:
 - `generate()` calls `buildXML()` first (see GWS-0002/GWS-0015) to obtain a `map[string]menuResult` (one entry per menu-bearing module), then `writeJSON(cfg.Waybar, menus)`.
 - `jsonSafe()` returns a deep copy of the tree with `map[interface{}]interface{}` values (non-string YAML keys) converted to `map[string]any`, so it can be marshaled by `encoding/json`. The input is never modified.
 - `writeJSON()`:

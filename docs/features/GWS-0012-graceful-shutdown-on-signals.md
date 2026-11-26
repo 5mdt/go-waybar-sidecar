@@ -8,7 +8,7 @@ The sidecar handles `SIGINT`, `SIGTERM`, and `SIGHUP` so it can be stopped clean
 
 ## Implementation
 
-`main.go` `run()`:
+`src/main.go` `run()`:
 - Registers a buffered signal channel via `signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)` and handles signals in a goroutine.
 - `SIGHUP`: logged at debug ("SIGHUP received (ignored)") and otherwise ignored - the sidecar does not use `SIGHUP` for reload (config reload is file-watch based, see GWS-0005).
 - `SIGINT` / `SIGTERM`: logs "shutting down" with the signal name, calls `waybar.stop()` (GWS-0027) to stop the supervised waybar child, then calls `os.Exit(0)`.

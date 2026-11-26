@@ -8,7 +8,7 @@ On startup the newest instance always wins: it terminates the running one and ta
 
 ## Implementation
 
-`pid.go` - `ensureSingleInstance()`:
+`src/pid.go` - `ensureSingleInstance()`:
 - `acquireInstanceLock()` takes a non-blocking exclusive `flock` on `<pidDir>/waybar-sidecar.lock` and writes its PID there.
 - If the lock is held, `terminatePIDs()` sends `SIGTERM` to the PID in the file, then `SIGKILL` after `sidecarStopGrace` (5s), and retries.
 - After the deadline it logs a warning and proceeds unlocked.

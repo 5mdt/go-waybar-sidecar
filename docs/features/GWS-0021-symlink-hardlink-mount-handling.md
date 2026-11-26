@@ -8,10 +8,10 @@ How the app behaves when config files or directories are symlinks, hardlinks, or
 
 ## Implementation
 
-Paths are resolved to their real location at startup via `resolvedPath()` (`config.go`), so watches use real paths even when a path is a symlink.
+Paths are resolved to their real location at startup via `resolvedPath()` (`src/config.go`), so watches use real paths even when a path is a symlink.
 
 - **Symlinked directories** (`~/.config/waybar`, `~/.config/go-waybar-sidecar`): followed - watched by their resolved real path.
-- **Symlinked files** (e.g. `config.yaml`, `style.css`): followed. `watch()` (`watcher.go`) also watches each symlink target's parent directory (`symlinkTargets()`), because inotify on a directory only reports events for its own entries, not a symlink target living elsewhere.
+- **Symlinked files** (e.g. `config.yaml`, `style.css`): followed. `watch()` (`src/watcher.go`) also watches each symlink target's parent directory (`symlinkTargets()`), because inotify on a directory only reports events for its own entries, not a symlink target living elsewhere.
 - **Hardlinks / bind mounts**: behave as regular files; the kernel resolves them. A bind mount must be present when the watcher starts.
 - **Symlinked subdirectories**: followed - watched recursively under their logical (pre-symlink) path, via `collectWatchDirs()`; a cycle (a symlink pointing back at an ancestor) is broken by tracking each directory's resolved real path.
 
@@ -30,7 +30,7 @@ None.
 
 ### Unit Testing
 
-- `TestSymlinkTargets`, `TestAcceptEvent`, `TestCollectWatchDirs` (`watcher_test.go`).
+- `TestSymlinkTargets`, `TestAcceptEvent`, `TestCollectWatchDirs` (`src/watcher_test.go`).
 
 ## Status
 

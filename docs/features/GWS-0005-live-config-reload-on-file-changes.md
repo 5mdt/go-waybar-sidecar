@@ -8,7 +8,7 @@ The sidecar watches the config file and the Waybar config directory for changes 
 
 ## Implementation
 
-`watcher.go` `watch(trigger func()) error`, run as a goroutine from `run()`:
+`src/watcher.go` `watch(trigger func()) error`, run as a goroutine from `run()`:
 - Creates an `fsnotify.Watcher` and adds watches for `configPath` and `waybarDir` via `addWatch()`. `addWatch()` watches a file directly, or walks a directory and watches every subdirectory (fsnotify is non-recursive).
 - On each event:
   - Ignores ops other than Write/Create/Remove/Rename (`isRelevantOp()`).

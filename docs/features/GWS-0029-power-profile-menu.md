@@ -8,8 +8,8 @@ A menu item can pull in a list of available `power-profiles-daemon` profiles (po
 
 ## Implementation
 
-`powerprofiles.go`:
-- Talks to `net.hadess.PowerProfiles` on the system bus (`/net/hadess/PowerProfiles`), the same `github.com/godbus/dbus/v5` already used by `notify.go`.
+`src/powerprofiles.go`:
+- Talks to `net.hadess.PowerProfiles` on the system bus (`/net/hadess/PowerProfiles`), the same `github.com/godbus/dbus/v5` already used by `src/notify.go`.
 - `scanPowerProfiles() []MenuItem` (package-level `var`, indirection for tests): reads the `Profiles` (`aa{sv}`) and `ActiveProfile` (`s`) properties and calls `buildPowerProfileItems`. Returns `nil` (menu item dropped, see `resolveInclude`) if the bus or the daemon is unavailable - best-effort, matches `newNotifier`'s pattern.
 - `parseProfileIDs(v dbus.Variant) []string`: extracts profile ids from the `Profiles` property in daemon-returned order (not re-sorted - this order is already low-to-high, e.g. power-saver, balanced, performance).
 - `powerProfileDisplayName(id string) string`: hyphenated id to Title Case, e.g. `power-saver` -> `Power Saver`.
@@ -17,13 +17,13 @@ A menu item can pull in a list of available `power-profiles-daemon` profiles (po
 - `watchPowerProfiles(trigger func())` (package-level `var`): subscribes to `org.freedesktop.DBus.Properties.PropertiesChanged` on the power-profiles object path and calls `trigger` whenever `ActiveProfile` is among the changed/invalidated properties. No-ops (logs at debug) if the system bus or the daemon isn't available.
 - `isActiveProfileChange(name string, body []interface{}) bool`: pure decode-and-match helper, split out so it's testable without a bus connection.
 
-`config.go`:
+`src/config.go`:
 - `resolveInclude` gains a `"power-profiles:plain"` case, resolving via `scanPowerProfiles()`.
 
-`generator.go`:
+`src/generator.go`:
 - `MenuItem.Bold` (`yaml:"-"`, set only by resolvers) controls label rendering in `setMenuItemLabel()`. Non-bold items use the `label` property. Bold items get a child `GtkLabel` with `use-markup=True` and `<b>...</b>`, because `GtkMenuItem.label` does not interpret markup.
 
-`watcher.go`:
+`src/watcher.go`:
 - The debounced reload trigger (GWS-0005) is shared between fsnotify events and a `go watchPowerProfiles(trigger)` goroutine started by `run()`, so an external profile change reloads the same way an edited `config.yaml` does (GWS-0005).
 
 ## Configuration

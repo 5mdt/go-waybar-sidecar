@@ -10,11 +10,11 @@ Once running, the sidecar's own waybar is a supervised child (GWS-0027): `reload
 
 ## Implementation
 
-`waybar.go` `sweepStrayWaybars()`:
+`src/waybar.go` `sweepStrayWaybars()`:
 - `waybarPIDs()` scans `/proc` for processes passing `isRealProc(pid, "/waybar")` (non-zombie, `/proc/<pid>/exe` ends in `/waybar`). No `pgrep`.
 - Calls `terminatePIDs` (GWS-0008) on them: `SIGTERM`, wait up to `sidecarStopGrace`, then `SIGKILL`. Logs "terminating process" per PID.
 
-Called once, from `main.go` `run()` at startup, after `ensureSingleInstance()` and before the first `generate()`/`reloadWaybar()` - so pre-existing strays are cleared before the sidecar starts its own instance.
+Called once, from `src/main.go` `run()` at startup, after `ensureSingleInstance()` and before the first `generate()`/`reloadWaybar()` - so pre-existing strays are cleared before the sidecar starts its own instance.
 
 ## Configuration
 

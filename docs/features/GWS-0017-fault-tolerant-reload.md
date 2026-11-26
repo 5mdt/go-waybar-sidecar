@@ -12,18 +12,18 @@ The sidecar is a long-running daemon and must not exit because of a bad `config.
 
 ## Implementation
 
-`config.go`:
+`src/config.go`:
 - `parseConfig(b []byte) (Config, error)` holds the YAML-unmarshal and `menu_definition` parsing; it returns errors, never exits.
 - `loadConfig() (Config, error)` reads `configPath`, calls `parseConfig()` and returns any read/parse error to the caller.
 
-`generator.go`:
+`src/generator.go`:
 - `buildXML()`: a `WriteToFile` failure for one menu is logged at error and that menu is skipped (`continue`); other menus are still written.
 - `writeJSON()`: a failure to create or encode `outJSON` is logged at error and the function returns without exiting.
 
-`watcher.go`:
+`src/watcher.go`:
 - `reload(cfg Config) Config`. When `!noGenerate`, it calls `loadConfig()`; on error it logs "reload failed, keeping previous config" and returns `cfg` unchanged without regenerating. On success it generates from and returns the new config.
 
-`main.go`:
+`src/main.go`:
 - `run()` startup: if `loadConfig()` returns an error, it logs the error and falls back to `parseConfig(defaultConfig)` (the embedded default from GWS-0004) so `cfg` is always valid before the first `generate()`/`watch()`.
 
 ## Configuration

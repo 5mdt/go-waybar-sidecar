@@ -177,7 +177,7 @@ func TestEntryVisible(t *testing.T) {
 func TestScanApplications_TerminalSortAndVisibility(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", home)
-	t.Setenv("XDG_DATA_DIRS", "")
+	t.Setenv("XDG_DATA_DIRS", t.TempDir())
 	t.Setenv("XDG_CURRENT_DESKTOP", "sway")
 	apps := filepath.Join(home, "applications")
 
@@ -248,7 +248,7 @@ func TestScanApplications_SortedAndDeduped(t *testing.T) {
 func TestScanApplications_Recursive(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", home)
-	t.Setenv("XDG_DATA_DIRS", "")
+	t.Setenv("XDG_DATA_DIRS", t.TempDir())
 
 	writeDesktopFile(t, filepath.Join(home, "applications"), filepath.Join("sub", "app.desktop"),
 		"[Desktop Entry]\nType=Application\nName=Nested\nExec=nested\n")
@@ -292,7 +292,7 @@ func TestParseDesktopEntry_Categories(t *testing.T) {
 func TestScanApplications_Categories(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", home)
-	t.Setenv("XDG_DATA_DIRS", "")
+	t.Setenv("XDG_DATA_DIRS", t.TempDir())
 
 	writeDesktopFile(t, filepath.Join(home, "applications"), "a.desktop",
 		"[Desktop Entry]\nType=Application\nName=A\nExec=a\nCategories=Utility;Development;\n")

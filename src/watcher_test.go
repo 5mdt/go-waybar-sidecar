@@ -62,7 +62,7 @@ func TestIsWatchedFile_OutsideWatchedDirs(t *testing.T) {
 func TestIsWatchedFile_AppDir(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_DATA_DIRS", "")
+	t.Setenv("XDG_DATA_DIRS", t.TempDir())
 
 	appDir := filepath.Join(dataHome, "applications")
 
@@ -324,7 +324,7 @@ func TestHandleCreate_NewSubdirectory(t *testing.T) {
 func TestHandleCreate_PendingRoot(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", filepath.Join(base, "share"))
-	t.Setenv("XDG_DATA_DIRS", "")
+	t.Setenv("XDG_DATA_DIRS", t.TempDir())
 	root := filepath.Join(base, "share", "applications")
 	roots := []string{root}
 	pending := map[string]bool{root: true}

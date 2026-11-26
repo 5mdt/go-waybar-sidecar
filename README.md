@@ -4,7 +4,7 @@ Generate configs for Waybar with menus, monitors waybar state. Suspiciously, cod
 
 ## Features
 
-- Monitors configuration and style files in config folder and start/reload Waybar. Waybar has no live reloading of config [yet](https://github.com/Alexays/Waybar/issues/961). Same behaviour can be got with simple shell script like [this](https://github.com/Alexays/Waybar/issues/961#issuecomment-2661418273).
+- Monitors configuration and style files in config folder and reloads Waybar in place via `SIGUSR2` (starts it if not running). Waybar itself does not watch its files ([discussion](https://github.com/Alexays/Waybar/issues/961)).
 - Small resource usage: ~0.0% CPU, ~10 MB RAM. It's a bit worse than bash + inotify (RSS is for really used RAM):
 
   ```table

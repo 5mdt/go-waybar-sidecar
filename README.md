@@ -25,7 +25,18 @@ Generate configs for Waybar with menus, monitors waybar state. Suspiciously, cod
 
 ## Installation
 
-Requires Go and `waybar`. Installs to `~/.local/bin`:
+Requires `waybar`.
+
+Prebuilt Linux binary (`amd64` or `arm64`) from the rolling `latest` release (built from `main`); use `releases/latest/download` for the newest tagged version:
+
+```sh
+arch=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+curl -fL -o ~/.local/bin/go-waybar-sidecar \
+  "https://github.com/5mdt/go-waybar-sidecar/releases/download/latest/go-waybar-sidecar-linux-$arch"
+chmod +x ~/.local/bin/go-waybar-sidecar
+```
+
+From source (requires Go), installs to `~/.local/bin`:
 
 ```sh
 make install

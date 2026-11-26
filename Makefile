@@ -1,7 +1,7 @@
 GO      := toolbox run go
 BIN     := go-waybar-sidecar
 BUILD   := build
-VERSION := $(shell git describe --tags --always --dirty)
+VERSION := $(shell git describe --tags --always --dirty --match 'v*')
 PREFIX  := $(HOME)/.local/bin
 
 .PHONY: all fmt test build install clean

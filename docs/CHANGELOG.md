@@ -16,6 +16,7 @@
 - Generated application list, categorized and with icons (GWS-0028, 0031, 0032).
 - Power profile menu (GWS-0029).
 - Session actions menu (GWS-0030).
+- GitHub Actions publishes Linux amd64/arm64 binaries: rolling `latest` from `main`, versioned releases from `v*` tags.
 - Generated `config.jsonc` starts with `//` header: generation date, app name, version and source (GWS-0001). Version is set via `-ldflags -X main.version` (`make build`).
 
 ## Changed
